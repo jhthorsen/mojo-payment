@@ -127,6 +127,19 @@ From L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API
 
 =head2 register_payment
 
+  $self = $self->register_payment(
+    $c,
+    {
+      amount => $num, # 99.90, not 9990
+      order_number => $str,
+      redirect_url => $str, # default to current request URL
+      # ...
+    },
+    sub {
+      my ($self, $res) = @_;
+    },
+  );
+
 From L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Register/>:
 
   The purpose of the register call is to send all the data needed to
@@ -136,6 +149,70 @@ From L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API
 
 NOTE: "amount" in this API need to be a decimal number, which will be duplicated with 100 to match
 the Nets documentation.
+
+There are many more options that can be passed on to L</register_payment>.
+Look at L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Register/>
+for a complete list. CamelCase arguments can be given in normal form. Examples:
+
+  # NetsDocumentation   | perl_argument_name
+  # --------------------|----------------------
+  # currencyCode        | currency_code
+  # customerPhoneNumber | customer_phone_number
+
+=cut
+
+sub register_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my $register_url = $self->_url('/Netaxept/Register.aspx');
+
+  $args->{amount}       or die 'amount missing in input';
+  $args->{order_number} or die 'order_number missing in input';
+  local $args->{amount} = $args->{amount} * 100;
+  local $args->{redirect_url} ||= $c->req->url->to_abs;
+
+  $register_url->query({
+    currencyCode        => $self->currency_code,
+    merchantId          => $self->merchant_id,
+    token               => $self->token,
+    environmentLanguage => 'perl',
+    OS                  => $^O || 'Mojolicious',
+    $self->_camelize($args),
+  });
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_ua->get($register_url, $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $res = $tx->res;
+
+      $res->code(0) unless $res->code;
+
+      eval {
+        my $id = $res->dom->RegisterResponse->TransactionId->text;
+        my $terminal_url = $self->_new_url('/Terminal/default.aspx')->query({merchantId => $self->merchant_id, transactionId => $id});
+
+        $res->headers->location($terminal_url);
+        $res->param(transaction_id => $id);
+        $res->code(302);
+        1;
+      } or do {
+        my $err = $res->error || {};
+        $res->code(500);
+        $res->error({
+          advice => $err->{advice} || 0,
+          message => $self->_extract_error($tx) || $err->{message} || 'Unknown error',
+        });
+      };
+
+      $self->$cb($res);
+    },
+  );
+
+  $self;
+}
 
 =head2 register
 
@@ -160,6 +237,15 @@ sub register {
       return $c;
     }
   );
+}
+
+sub _camelize {
+  my ($self, $args) = @_;
+  map { my $k = $_; s/_([a-z])/\U$1/g; ($_ => $args->{$k}); } keys %$args;
+}
+
+sub _url {
+  Mojo::URL->new($_[0]->base_url)->path($_[1]);
 }
 
 =head1 COPYRIGHT AND LICENSE
