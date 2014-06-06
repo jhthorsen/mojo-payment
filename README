@@ -1,0 +1,58 @@
+NAME
+    Mojolicious::Plugin::NetsPayment - Make payments using Nets
+
+VERSION
+    0.01
+
+DESCRIPTION
+    Mojolicious::Plugin::NetsPayment is a plugin for the Mojolicious web
+    framework which allow you to do payments using
+    <http://www.betalingsterminal.no|Nets>.
+
+SYNOPSIS
+SEE ALSO
+    *   Overview
+
+        <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledni
+        ng/Overview/>
+
+    *   API
+
+        <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledni
+        ng/API/>
+
+    *   Validation
+
+        <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledni
+        ng/API/Validation/>
+
+ATTRIBUTES
+  base_url
+    This is the location to nets payment solution. Will be set to
+    <https://epayment.nets.eu> if the mojolicious application mode is
+    "production" or <https://test.epayment.nets.eu> if not.
+
+  currency_code
+    The currency code, following ISO 4217. Default is "NOK".
+
+  merchant_id
+    Provided by Nets. Required to be given as argument to "register".
+
+  token
+    Provided by Nets. Required to be given as argument to "register".
+
+HELPERS
+  nets_process_payment
+  nets_query_payment
+  nets_register_payment
+METHODS
+  register
+COPYRIGHT AND LICENSE
+    Copyright (C) 2014, Jan Henning Thorsen
+
+    This program is free software, you can redistribute it and/or modify it
+    under the terms of the Artistic License version 2.0.
+
+AUTHOR
+    Jan Henning Thorsen - "jhthorsen@cpan.org"
+
