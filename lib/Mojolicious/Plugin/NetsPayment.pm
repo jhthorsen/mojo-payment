@@ -194,9 +194,96 @@ sub process_payment {
 
 =head2 query_payment
 
+  $self = $self->query_payment(
+    $c,
+    {
+      transaction_id => $str,
+    },
+    sub {
+      my ($self, $res) = @_;
+    },
+  );
+
 From L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Query/>:
 
   To check the status of a transaction at any time, you can use the Query-call.
+
+=cut
+
+sub query_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my $query_url = $self->_url('/Netaxept/Query.aspx');
+
+  $args = { transaction_id => $args } unless ref $args;
+  $args->{transaction_id} or die 'transaction_id missing in input';
+
+  $query_url->query({
+    merchantId    => $self->merchant_id,
+    token         => $self->token,
+    transactionId => $args->{transaction_id},
+  });
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_ua->get($query_url, $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $res = $tx->res;
+
+      $res->code(0) unless $res->code;
+
+      eval {
+        my $body = $res->dom->QueryResponse;
+
+        $res->param(
+            amount          => $body->Amount->text / 100,
+            amount_captured => $body->AmountCaptured->text,
+            amount_credited => $body->AmountCredited->text,
+            annulled        => $body->Annulled->text,
+            authorized      => $body->Authorized->text,
+            currency_code   => $body->Currency->text,
+            fee             => $body->Fee->text / 100,
+            order_number    => $body->OrderNumber->text,
+            total           => $body->Total->text / 100,
+
+            authorization_id      => eval { $body->AuthorizationId->text },
+            customer_address1     => eval { $body->Address1->text },
+            customer_address2     => eval { $body->Address2->text },
+            customer_country      => eval { $body->Country->text },
+            customer_email        => eval { $body->Email->text },
+            customer_first_name   => eval { $body->FirstName->text },
+            customer_ip           => eval { $body->IP->text },
+            customer_last_name    => eval { $body->LastName->text },
+            customer_number       => eval { $body->CustomerNumber->text },
+            customer_phone_number => eval { $body->PhoneNumber->text },
+            customer_postcode     => eval { $body->Postcode->text },
+            eci                   => eval { $body->ECI->text },
+            expiry_date           => eval { $body->ExpiryDate->text },
+            issuer_country        => eval { $body->IssuerCountry->text },
+            issuer_id             => eval { $body->IssuerId->text },
+            order_description     => eval { $body->OrderDescription->text },
+            pan                   => eval { $body->MaskedPan->text },
+            payment_method        => eval { $body->PaymentMethod->text },
+            status                => eval { $body->AuthenticatedStatus->text },
+        );
+        1;
+      } or do {
+        my $err = $res->error || {};
+        $res->code(500);
+        $res->error({
+          advice => $err->{advice} || 0,
+          message => $self->_extract_error($tx) || $err->{message} || 'Unknown error',
+        });
+      };
+
+      $self->$cb($res);
+    },
+  );
+
+  $self;
+}
 
 =head2 register_payment
 
