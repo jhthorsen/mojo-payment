@@ -113,11 +113,84 @@ the end. Example:
 
 =head2 process_payment
 
+  $self = $self->process_payment(
+    $c,
+    {
+      transaction_id => $str, # default to $c->param("transactionId")
+      operation => $str, # default to AUTH
+      # ...
+    },
+    sub {
+      my ($self, $res) = @_;
+    },
+  );
+
 From L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Process/>:
 
   All financial transactions are encapsulated by the "Process"-call.
   Available financial transactions are AUTH, SALE, CAPTURE, CREDIT
   and ANNUL.
+
+=cut
+
+sub process_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my $process_url = $self->_url('/Netaxept/Process.aspx');
+
+  $args = { transaction_id => $args } unless ref $args;
+  $args->{operation} ||= 'AUTH';
+  $args->{transaction_id} ||= $c->param('transactionId') or die 'transaction_id missing in input';
+
+  $process_url->query({
+    merchantId    => $self->merchant_id,
+    token         => $self->token,
+    operation     => $args->{operation} || 'AUTH',
+    transactionId => $args->{transaction_id},
+    $self->_camelize($args),
+  });
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_ua->get($process_url, $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $res = $tx->res;
+
+      $res->code(0) unless $res->code;
+
+      eval {
+        my $body = $res->dom->ProcessResponse;
+        my $code = $body->ResponseCode->text;
+
+        $res->param(code => $code);
+
+        if($code eq 'OK') {
+          $res->param(authorization_id => $body->AuthorizationId->text);
+          $res->code(200);
+        }
+        else {
+          $res->param(message => $body->ResponseText->text);
+          $res->param(source => $body->ResponseSource->text);
+          $res->code(500) if $res->code == 200;
+        }
+        1;
+      } or do {
+        my $err = $res->error || {};
+        $res->code(500);
+        $res->error({
+          advice => $err->{advice} || 0,
+          message => $self->_extract_error($tx) || $err->{message} || 'Unknown error',
+        });
+      };
+
+      $self->$cb($res);
+    },
+  );
+
+  $self;
+}
 
 =head2 query_payment
 
