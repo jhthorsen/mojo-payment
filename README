@@ -10,6 +10,64 @@ DESCRIPTION
     <http://www.betalingsterminal.no|Nets>.
 
 SYNOPSIS
+      use Mojolicious::Lite;
+
+      plugin NetsPayment => {
+        merchant_id => '...',
+        token => '...',
+      };
+
+      # register a payment and send the visitor to Nets payment terminal
+      post '/checkout' => sub {
+        my $self = shift->render_later;
+        my %payment = (
+          amount => scalar $self->param('amount'),
+          order_number => scalar $self->param('order_number'),
+        );
+
+        Mojo::IOLoop->delay(
+          sub {
+            my ($delay) = @_;
+            $self->nets(register => \%payment, $delay->begin);
+          },
+          sub {
+            my ($delay, $res) = @_;
+            return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+            # store $res->param('transaction_id');
+            $self->redirect_to($res->headers->location);
+          },
+        );
+      };
+
+      # after redirected back from Nets payment terminal
+      get '/checkout' => sub {
+        my $self = shift->render_later;
+
+        Mojo::IOLoop->delay(
+          sub {
+            my ($delay) = @_;
+            $self->nets(process => {}, $delay->begin);
+          },
+          sub {
+            my ($delay, $res) = @_;
+            return $self->render(text => $res->error->{message}, status => $res->code) unless $res->code == 200;
+            # store $res->param('transaction_id') and $res->param('authorization_id');
+            $self->render(text => "yay!");
+          },
+        );
+      };
+
+      app->start;
+
+ENVIRONMENT VARIABLES
+  MOJO_NETS_DEBUG
+    Get extra debug output to STDERR.
+
+  MOJO_NETS_SELF_CONTAINED
+    Set this environment variable to a true value and this module will try
+    to replicate the behavior of Nets. This is especially useful when
+    writing unit tests.
+
 SEE ALSO
     *   Overview
 
@@ -28,25 +86,122 @@ SEE ALSO
 
 ATTRIBUTES
   base_url
-    This is the location to nets payment solution. Will be set to
+      $str = $self->base_url;
+
+    This is the location to Nets payment solution. Will be set to
     <https://epayment.nets.eu> if the mojolicious application mode is
     "production" or <https://test.epayment.nets.eu> if not.
 
   currency_code
+      $str = $self->currency_code;
+
     The currency code, following ISO 4217. Default is "NOK".
 
   merchant_id
-    Provided by Nets. Required to be given as argument to "register".
+      $str = $self->merchant_id;
+
+    The value for the merchant ID, can be found in the Nets admin gui.
 
   token
-    Provided by Nets. Required to be given as argument to "register".
+      $str = $self->token;
+
+    The value for the merchant ID, can be found in the Nets admin gui.
 
 HELPERS
-  nets_process_payment
-  nets_query_payment
-  nets_register_payment
+  nets
+      $self = $c->nets;
+      $c = $c->nets($method => @args);
+
+    Returns this instance unless any args have been given or calls one of
+    the avaiable "METHODS" instead. $method need to be without "_payment" at
+    the end. Example:
+
+      $c->nets(register => { ... }, sub {
+        my ($c, $res) = @_;
+        # ...
+      });
+
 METHODS
+  process_payment
+      $self = $self->process_payment(
+        $c,
+        {
+          transaction_id => $str, # default to $c->param("transactionId")
+          operation => $str, # default to AUTH
+          # ...
+        },
+        sub {
+          my ($self, $res) = @_;
+        },
+      );
+
+    From
+    <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/A
+    PI/Process/>:
+
+      All financial transactions are encapsulated by the "Process"-call.
+      Available financial transactions are AUTH, SALE, CAPTURE, CREDIT
+      and ANNUL.
+
+  query_payment
+      $self = $self->query_payment(
+        $c,
+        {
+          transaction_id => $str,
+        },
+        sub {
+          my ($self, $res) = @_;
+        },
+      );
+
+    From
+    <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/A
+    PI/Query/>:
+
+      To check the status of a transaction at any time, you can use the Query-call.
+
+  register_payment
+      $self = $self->register_payment(
+        $c,
+        {
+          amount => $num, # 99.90, not 9990
+          order_number => $str,
+          redirect_url => $str, # default to current request URL
+          # ...
+        },
+        sub {
+          my ($self, $res) = @_;
+        },
+      );
+
+    From
+    <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/A
+    PI/Register/>:
+
+      The purpose of the register call is to send all the data needed to
+      complete a transaction to Netaxept servers. The input data is
+      organized into a RegisterRequest, and the output data is formatted
+      as a RegisterResponse.
+
+    NOTE: "amount" in this API need to be a decimal number, which will be
+    duplicated with 100 to match the Nets documentation.
+
+    There are many more options that can be passed on to "register_payment".
+    Look at
+    <http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/A
+    PI/Register/> for a complete list. CamelCase arguments can be given in
+    normal form. Examples:
+
+      # NetsDocumentation   | perl_argument_name
+      # --------------------|----------------------
+      # currencyCode        | currency_code
+      # customerPhoneNumber | customer_phone_number
+
   register
+      $app->plugin(NetsPayment => \%config);
+
+    Called when registering this plugin in the main Mojolicious application.
+
 COPYRIGHT AND LICENSE
     Copyright (C) 2014, Jan Henning Thorsen
 

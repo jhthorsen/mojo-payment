@@ -37,10 +37,9 @@ framework which allow you to do payments using L<http://www.betalingsterminal.no
       },
       sub {
         my ($delay, $res) = @_;
-        my $json = $res->error || {};
-        $json->{transaction_id} = $res->param('transaction_id');
-        $json->{location} = $res->headers->location;
-        $self->render(json => $json, status => $res->code);
+        return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+        # store $res->param('transaction_id');
+        $self->redirect_to($res->headers->location);
       },
     );
   };
@@ -56,9 +55,9 @@ framework which allow you to do payments using L<http://www.betalingsterminal.no
       },
       sub {
         my ($delay, $res) = @_;
-        my $json = $res->error || {};
-        $json->{authorization_id} = $res->param('authorization_id');
-        $self->render(json => $json, status => $res->code);
+        return $self->render(text => $res->error->{message}, status => $res->code) unless $res->code == 200;
+        # store $res->param('transaction_id') and $res->param('authorization_id');
+        $self->render(text => "yay!");
       },
     );
   };
@@ -213,6 +212,7 @@ sub process_payment {
         $res->param(code => $code);
 
         if($code eq 'OK') {
+          $res->param(transaction_id => $body->TransactionId->text);
           $res->param(authorization_id => $body->AuthorizationId->text);
           $res->code(200);
         }
