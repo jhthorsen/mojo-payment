@@ -9,6 +9,9 @@ DESCRIPTION
     framework which allow you to do payments using
     <http://www.betalingsterminal.no|Nets>.
 
+    This module is EXPERIMENTAL. The API can change at any time. Let me know
+    if you are using it.
+
 SYNOPSIS
       use Mojolicious::Lite;
 

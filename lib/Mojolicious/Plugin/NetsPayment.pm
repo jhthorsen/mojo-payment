@@ -13,6 +13,9 @@ Mojolicious::Plugin::NetsPayment - Make payments using Nets
 L<Mojolicious::Plugin::NetsPayment> is a plugin for the L<Mojolicious> web
 framework which allow you to do payments using L<http://www.betalingsterminal.no|Nets>.
 
+This module is EXPERIMENTAL. The API can change at any time. Let me know
+if you are using it.
+
 =head1 SYNOPSIS
 
   use Mojolicious::Lite;
