@@ -24,13 +24,58 @@ framework which allow you to do payments using L<http://www.betalingsterminal.no
 
   # register a payment and send the visitor to Nets payment terminal
   post '/checkout' => sub {
+    my $self = shift->render_later;
+    my %payment = (
+      amount => scalar $self->param('amount'),
+      order_number => scalar $self->param('order_number'),
+    );
+
+    Mojo::IOLoop->delay(
+      sub {
+        my ($delay) = @_;
+        $self->nets(register => \%payment, $delay->begin);
+      },
+      sub {
+        my ($delay, $res) = @_;
+        my $json = $res->error || {};
+        $json->{transaction_id} = $res->param('transaction_id');
+        $json->{location} = $res->headers->location;
+        $self->render(json => $json, status => $res->code);
+      },
+    );
   };
 
   # after redirected back from Nets payment terminal
   get '/checkout' => sub {
+    my $self = shift->render_later;
+
+    Mojo::IOLoop->delay(
+      sub {
+        my ($delay) = @_;
+        $self->nets(process => {}, $delay->begin);
+      },
+      sub {
+        my ($delay, $res) = @_;
+        my $json = $res->error || {};
+        $json->{authorization_id} = $res->param('authorization_id');
+        $self->render(json => $json, status => $res->code);
+      },
+    );
   };
 
   app->start;
+
+=head1 ENVIRONMENT VARIABLES
+
+=head2 MOJO_NETS_DEBUG
+
+Get extra debug output to STDERR.
+
+=head2 MOJO_NETS_SELF_CONTAINED
+
+Set this environment variable to a true value and this module will try to
+replicate the behavior of Nets. This is especially useful when writing
+unit tests.
 
 =head1 SEE ALSO
 
@@ -54,6 +99,7 @@ L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Vali
 
 use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::UserAgent;
+use constant DEBUG => $ENV{MOJO_NETS_DEBUG} || 0;
 
 our $VERSION = '0.01';
 
@@ -139,7 +185,7 @@ sub process_payment {
 
   $args = { transaction_id => $args } unless ref $args;
   $args->{operation} ||= 'AUTH';
-  $args->{transaction_id} ||= $c->param('transactionId') or die 'transaction_id missing in input';
+  $args->{transaction_id} ||= $c->param('transactionId') or return $self->$cb($self->_error('transaction_id missing in input'));
 
   $process_url->query({
     merchantId    => $self->merchant_id,
@@ -177,6 +223,7 @@ sub process_payment {
         }
         1;
       } or do {
+        warn "[MOJO_NETS] ! $@" if DEBUG;
         my $err = $res->error || {};
         $res->code(500);
         $res->error({
@@ -215,7 +262,7 @@ sub query_payment {
   my $query_url = $self->_url('/Netaxept/Query.aspx');
 
   $args = { transaction_id => $args } unless ref $args;
-  $args->{transaction_id} or die 'transaction_id missing in input';
+  $args->{transaction_id} or return $self->$cb($self->_error('transaction_id missing in input'));
 
   $query_url->query({
     merchantId    => $self->merchant_id,
@@ -270,6 +317,7 @@ sub query_payment {
         );
         1;
       } or do {
+        warn "[MOJO_NETS] ! $@" if DEBUG;
         my $err = $res->error || {};
         $res->code(500);
         $res->error({
@@ -325,8 +373,8 @@ sub register_payment {
   my ($self, $c, $args, $cb) = @_;
   my $register_url = $self->_url('/Netaxept/Register.aspx');
 
-  $args->{amount}       or die 'amount missing in input';
-  $args->{order_number} or die 'order_number missing in input';
+  $args->{amount}       or return $self->$cb($self->_error('amount missing in input'));
+  $args->{order_number} or return $self->$cb($self->_error('order_number missing in input'));
   local $args->{amount} = $args->{amount} * 100;
   local $args->{redirect_url} ||= $c->req->url->to_abs;
 
@@ -352,13 +400,14 @@ sub register_payment {
 
       eval {
         my $id = $res->dom->RegisterResponse->TransactionId->text;
-        my $terminal_url = $self->_new_url('/Terminal/default.aspx')->query({merchantId => $self->merchant_id, transactionId => $id});
+        my $terminal_url = $self->_url('/Terminal/default.aspx')->query({merchantId => $self->merchant_id, transactionId => $id});
 
         $res->headers->location($terminal_url);
         $res->param(transaction_id => $id);
         $res->code(302);
         1;
       } or do {
+        warn "[MOJO_NETS] ! $@" if DEBUG;
         my $err = $res->error || {};
         $res->code(500);
         $res->error({
@@ -387,6 +436,7 @@ sub register {
 
   # copy config to this object
   $self->{$_} = $config->{$_} for grep { $self->$_ } keys %$config;
+  $self->_add_routes($app) if $ENV{MOJO_NETS_SELF_CONTAINED};
 
   $app->helper(
     nets => sub {
@@ -399,13 +449,51 @@ sub register {
   );
 }
 
+sub _add_routes {
+  my ($self, $app) = @_;
+  my $r = $app->routes;
+  my %txn2url;
+
+  $self->base_url($ENV{MOJO_NETS_SELF_CONTAINED} =~ /^http/ ? $ENV{MOJO_NETS_SELF_CONTAINED} : '');
+
+  $r->get('/Netaxept/Process.aspx')->to(cb => sub { shift->render('netspayment/process'); }, format => 'aspx');
+  $r->get('/Netaxept/Query.aspx')->to(cb => sub { shift->render('netspayment/query'); }, format => 'aspx');
+  $r->get('/Netaxept/Register.aspx')->to(cb => sub {
+    my $self = shift;
+    my $txn_id = 'b127f98b77f741fca6bb49981ee6e846';
+    $txn2url{$txn_id} = $self->param('redirectUrl') || 'missing';
+    $self->render('netspayment/register', txn_id => $txn_id, format => 'aspx');
+  });
+  $r->get('/Terminal/default.aspx')->to(cb => sub {
+    my $self = shift;
+    my $txn_id = $self->param('transactionId') || 'missing';
+    $self->render('netspayment/terminal', format => 'aspx', redirect_url => $txn2url{$txn_id});
+  });
+
+  push @{ $app->renderer->classes }, __PACKAGE__;
+}
+
 sub _camelize {
   my ($self, $args) = @_;
   map { my $k = $_; s/_([a-z])/\U$1/g; ($_ => $args->{$k}); } keys %$args;
 }
 
+sub _error {
+  my ($self, $err) = @_;
+  my $res = Mojo::Message::Response->new;
+  return $res->error({ message => $err, advice => 400 })->code(400);
+}
+
+sub _extract_error {
+  my ($self, $tx) = @_;
+  local $@;
+  eval { $_[0]->res->dom->Exception->Error->Message->text };
+}
+
 sub _url {
-  Mojo::URL->new($_[0]->base_url)->path($_[1]);
+  my $url = Mojo::URL->new($_[0]->base_url .$_[1]);
+  warn "[MOJO_NETS] URL $url\n" if DEBUG;
+  $url;
 }
 
 =head1 COPYRIGHT AND LICENSE
@@ -422,3 +510,43 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 =cut
 
 1;
+
+__DATA__
+@@ layouts/netspayment_xml.aspx.ep
+<html>
+<head>
+  <title>Nets terminal</title>
+</head>
+<body>
+%= content
+</body>
+</html>
+
+@@ layouts/netspayment_xml.aspx.ep
+<?xml version="1.0" ?>
+%= content
+
+@@ netspayment/process.aspx.ep
+% layout 'netspayment_xml';
+<ProcessResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <Operation>AUTH</Operation>
+  <ResponseCode>OK</ResponseCode>
+  <AuthorizationId>064392</AuthorizationId>
+  <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId>
+  <ExecutionTime>2009-12-16T11:17:54.633125+01:00</ExecutionTime>
+  <MerchantId>9999997</MerchantId>
+</ProcessResponse>
+
+@@ netspayment/query.aspx.ep
+% layout 'netspayment_xml';
+
+@@ netspayment/register.aspx.ep
+% layout 'netspayment_xml';
+<RegisterResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <TransactionId><%= $txn_id %></TransactionId>
+</RegisterResponse>
+
+@@ netspayment/terminal.aspx.ep
+% layout 'netspayment';
+%= join '|', $self->param;
+%= link_to 'Complete payment', url_for($redirect_url)->query({ transactionId => param('transactionId'), responseCode => 'OK' }), class => 'back'
