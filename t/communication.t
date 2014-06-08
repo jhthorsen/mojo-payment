@@ -23,10 +23,15 @@ $ENV{MOJO_NETS_SELF_CONTAINED} = 1;
       },
       sub {
         my ($delay, $res) = @_;
-        my $json = $res->error || {};
-        $json->{transaction_id} = $res->param('transaction_id');
-        $json->{location} = $res->headers->location;
-        $self->render(json => $json, status => $res->code);
+        $self->render(
+          json => {
+            message => scalar $res->param('message'),
+            source => scalar $res->param('source'),
+            transaction_id => scalar $res->param('transaction_id'),
+            location => $res->headers->location,
+          },
+          status => $res->code,
+        );
       },
     );
   };
@@ -42,9 +47,14 @@ $ENV{MOJO_NETS_SELF_CONTAINED} = 1;
       },
       sub {
         my ($delay, $res) = @_;
-        my $json = $res->error || {};
-        $json->{authorization_id} = $res->param('authorization_id');
-        $self->render(json => $json, status => $res->code);
+        $self->render(
+          json => {
+            message => scalar $res->param('message'),
+            source => scalar $res->param('source'),
+            authorization_id => scalar $res->param('authorization_id'),
+          },
+          status => $res->code,
+        );
       },
     );
   };
@@ -60,7 +70,7 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
   @tx = ();
   $t->post_ok('/checkout')
     ->status_is(400)
-    ->json_is('/advice', 400)
+    ->json_is('/source', 'Mojolicious::Plugin::NetsPayment')
     ->json_is('/message', 'amount missing in input')
     ->json_is('/transaction_id', undef)
     ;
@@ -68,7 +78,7 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
   @tx = ();
   $t->post_ok('/checkout?amount=100')
     ->status_is(400)
-    ->json_is('/advice', 400)
+    ->json_is('/source', 'Mojolicious::Plugin::NetsPayment')
     ->json_is('/message', 'order_number missing in input')
     ->json_is('/transaction_id', undef)
     ;

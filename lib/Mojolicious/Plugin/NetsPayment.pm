@@ -58,7 +58,7 @@ if you are using it.
       },
       sub {
         my ($delay, $res) = @_;
-        return $self->render(text => $res->error->{message}, status => $res->code) unless $res->code == 200;
+        return $self->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
         # store $res->param('transaction_id') and $res->param('authorization_id');
         $self->render(text => "yay!");
       },
@@ -300,27 +300,81 @@ Useful C<$res> values:
 
 =item * $res->param("amount")
 
+Holds the "amount" given to L</register_payment>.
+
 =item * $res->param("amount_captured")
+
+The amount which has been captured on this transaction.
+This value is the "AmountCaptured" value devided by 100.
 
 =item * $res->param("amount_credited")
 
+The amount which has been credited on this transaction.
+This value is the "AmountCredited" value devided by 100.
+
 =item * $res->param("annulled")
+
+Whether or not this transaction has been annulled.
+Boolean true or false.
 
 =item * $res->param("authorized")
 
+Whether or not this transaction has been authorized.
+Boolean true or false.
+
 =item * $res->param("currency_code")
 
-=item * $res->param("fee")
+The currency code, following ISO 4217. Typical examples include "NOK" and
+"USD". Often the same as L</currency_code>.
+
+=item * $res->param("order_description")
+
+Holds the "order_description" given to L</register_payment>.
 
 =item * $res->param("order_number")
 
-=item * $res->param("total")
+Holds the "order_number" given to L</register_payment>.
 
-=item * And many more...
+=item * $res->param("authorization_id")
 
-The rest of the params are optional, but can be looked up with normalized
-keys. This means no CamelCase and the keys will match the input to
-L</register_payment>.
+Same as "authorization_id" from L</process_payment>.
+
+=item * $res->param("customer_address1")
+
+=item * $res->param("customer_address2")
+
+=item * $res->param("customer_country")
+
+=item * $res->param("customer_email")
+
+=item * $res->param("customer_first_name")
+
+=item * $res->param("customer_ip")
+
+=item * $res->param("customer_last_name")
+
+=item * $res->param("customer_number")
+
+=item * $res->param("customer_phone_number")
+
+=item * $res->param("customer_postcode")
+
+=item * $res->param("expiry_date")
+
+Which date the card expires on the format YYMM.
+
+=item * $res->param("issuer_country")
+
+Which country the card was issued, following ISO 3166.
+
+=item * $res->param("masked_pan")
+
+The personal account number used for this transaction, masked with asterisks.
+
+=item * $res->param("payment_method")
+
+Which payment method was used for this transaction. Examples: "Visa",
+"MasterCard", "AmericanExpress", ...
 
 =back
 
@@ -354,39 +408,32 @@ sub query_payment {
 
       local $@;
       eval {
-        my $body = $res->dom->QueryResponse;
+        my $body = $res->dom->PaymentInfo;
 
-        $res->param(
-            amount          => $body->Amount->text / 100,
-            amount_captured => $body->AmountCaptured->text,
-            amount_credited => $body->AmountCredited->text,
-            annulled        => $body->Annulled->text,
-            authorized      => $body->Authorized->text,
-            currency_code   => $body->Currency->text,
-            fee             => $body->Fee->text / 100,
-            order_number    => $body->OrderNumber->text,
-            total           => $body->Total->text / 100,
+        $res->param(amount            => $body->OrderInformation->Amount->text / 100);
+        $res->param(amount_captured   => $body->Summary->AmountCaptured->text / 100);
+        $res->param(amount_credited   => $body->Summary->AmountCredited->text / 100);
+        $res->param(annuled           => $body->Summary->Annuled->text eq 'true' ? 1 : 0);
+        $res->param(authorized        => $body->Summary->Authorized->text eq 'true' ? 1 : 0);
+        $res->param(currency_code     => $body->OrderInformation->Currency->text);
+        $res->param(order_description => $body->OrderInformation->OrderDescription->text);
+        $res->param(order_number      => $body->OrderInformation->OrderNumber->text);
 
-            authorization_id      => eval { $body->AuthorizationId->text },
-            customer_address1     => eval { $body->Address1->text },
-            customer_address2     => eval { $body->Address2->text },
-            customer_country      => eval { $body->Country->text },
-            customer_email        => eval { $body->Email->text },
-            customer_first_name   => eval { $body->FirstName->text },
-            customer_ip           => eval { $body->IP->text },
-            customer_last_name    => eval { $body->LastName->text },
-            customer_number       => eval { $body->CustomerNumber->text },
-            customer_phone_number => eval { $body->PhoneNumber->text },
-            customer_postcode     => eval { $body->Postcode->text },
-            eci                   => eval { $body->ECI->text },
-            expiry_date           => eval { $body->ExpiryDate->text },
-            issuer_country        => eval { $body->IssuerCountry->text },
-            issuer_id             => eval { $body->IssuerId->text },
-            order_description     => eval { $body->OrderDescription->text },
-            pan                   => eval { $body->MaskedPan->text },
-            payment_method        => eval { $body->PaymentMethod->text },
-            status                => eval { $body->AuthenticatedStatus->text },
-        );
+        $res->param(authorization_id      => eval { $body->Summary->AuthorizationId->text });
+        $res->param(customer_address1     => eval { $body->CustomerInformation->Address1->text });
+        $res->param(customer_address2     => eval { $body->CustomerInformation->Address2->text });
+        $res->param(customer_country      => eval { $body->iCustomerInformation->Country->text });
+        $res->param(customer_email        => eval { $body->CustomerInformation->Email->text });
+        $res->param(customer_first_name   => eval { $body->CustomerInformation->FirstName->text });
+        $res->param(customer_ip           => eval { $body->CustomerInformation->IP->text });
+        $res->param(customer_last_name    => eval { $body->CustomerInformation->LastName->text });
+        $res->param(customer_number       => eval { $body->CustomerInformation->CustomerNumber->text });
+        $res->param(customer_phone_number => eval { $body->CustomerInformation->PhoneNumber->text });
+        $res->param(customer_postcode     => eval { $body->CustomerInformation->Postcode->text });
+        $res->param(expiry_date           => eval { $body->CardInformation->ExpiryDate->text });
+        $res->param(issuer_country        => eval { $body->CardInformation->IssuerCountry->text });
+        $res->param(masked_pan            => eval { $body->CardInformation->MaskedPAN->text });
+        $res->param(payment_method        => eval { $body->CardInformation->PaymentMethod->text });
         1;
       } or do {
         warn "[MOJO_NETS] ! $@" if DEBUG;
@@ -568,7 +615,10 @@ sub _camelize {
 sub _error {
   my ($self, $err) = @_;
   my $res = Mojo::Message::Response->new;
-  return $res->error({ message => $err, advice => 400 })->code(400);
+  $res->code(400);
+  $res->param(message => $err);
+  $res->param(source => __PACKAGE__);
+  $res;
 }
 
 sub _extract_error {
@@ -580,7 +630,7 @@ sub _extract_error {
   $err = eval { $_[0]->res->dom->Exception->Error->Message->text };
 
   $res->code(500);
-  $res->param(code => 'Unknown') unless $res->param('code');
+  $res->param(code => '') unless $res->param('code');
   $res->param(message => $err // $e);
   $res->param(source => $err ? $self->base_url : __PACKAGE__);
 }
@@ -671,11 +721,63 @@ __DATA__
 
 @@ nets/Netaxept/Query.aspx.ep
 <?xml version="1.0" ?>
-<Exception xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <Error xsi:type="AuthenticationException">
-    <Message>TODO</Message>
-  </Error>
-</Exception>
+<PaymentInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <MerchantId>9999997</MerchantId>
+  <TransactionId>b127f98b77f741fca6bb49981ee6e846</TransactionId>
+  <QueryFinished>2009-12-16T15:18:30.445625+01:00</QueryFinished>
+  <OrderInformation>
+    <Amount>200</Amount>
+    <Currency>NOK</Currency>
+    <OrderNumber>10011</OrderNumber>
+    <OrderDescription></OrderDescription>
+  </OrderInformation>
+  <CustomerInformation>
+    <Email>jhthorsen@cpan.org</Email>
+    <IP>91.102.26.94</IP>
+    <PhoneNumber></PhoneNumber>
+    <FirstName>Jan Henning</FirstName>
+    <LastName>Thorsen</LastName>
+    <CustomerNumber></CustomerNumber>
+  </CustomerInformation>
+  <Summary>
+    <AmountCaptured>200</AmountCaptured>
+    <AmountCredited>0</AmountCredited>
+    <Annuled>false</Annuled>
+    <Authorized>true</Authorized>
+    <AuthorizationId>064392</AuthorizationId>
+  </Summary>
+  <CardInformation>
+    <IssuerCountry>NO</IssuerCountry>
+    <MaskedPAN>492500******0004</MaskedPAN>
+    <PaymentMethod>Visa</PaymentMethod>
+    <ExpiryDate>1212</ExpiryDate>
+  </CardInformation>
+  <History>
+    <TransactionLogLine>
+      <DateTime>2009-12-16T10:26:47.243</DateTime>
+      <Description />
+      <Operation>Register</Operation>
+      <TransactionReconRef />
+    </TransactionLogLine>
+    <TransactionLogLine>
+      <DateTime>2009-12-16T11:17:54.633</DateTime>
+      <Operation>Auth</Operation>
+      <BatchNumber>555</BatchNumber>
+      <TransactionReconRef />
+    </TransactionLogLine>
+    <TransactionLogLine>
+      <Amount>200</Amount>
+      <DateTime>2009-12-16T11:40:57.603</DateTime>
+      <Description />
+      <Operation>Capture</Operation>
+      <BatchNumber>555</BatchNumber>
+      <TransactionReconRef />
+    </TransactionLogLine>
+  </History>
+  <ErrorLog />
+  <AuthenticationInformation />
+  <AvtaleGiroInformation />
+</PaymentInfo>
 
 @@ nets/Netaxept/Register.aspx.ep
 <?xml version="1.0" ?>
