@@ -79,6 +79,28 @@ Set this environment variable to a true value and this module will try to
 replicate the behavior of Nets. This is especially useful when writing
 unit tests.
 
+To mimic Nets behavior, it will add these routes to your application:
+
+=over 4
+
+=item * /nets/Netaxept/Process.aspx
+
+L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Process/>.
+
+=item * /nets/Netaxept/Query.aspx
+
+L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Query/>.
+
+=item * /nets/Netaxept/Register.aspx
+
+L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Register/>.
+
+=item * /nets/Terminal/default.aspx
+
+L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/Terminal/>.
+
+=back
+
 =head1 SEE ALSO
 
 =over 4
@@ -90,10 +112,6 @@ L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/Overview
 =item * API
 
 L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/>
-
-=item * Validation
-
-L<http://www.betalingsterminal.no/Netthandel-forside/Teknisk-veiledning/API/Validation/>
 
 =back
 
@@ -455,22 +473,26 @@ sub register {
 sub _add_routes {
   my ($self, $app) = @_;
   my $r = $app->routes;
-  my %txn2url;
+  my $payments = $self->{payments} ||= {}; # just here for debug purposes, may change without warning
 
-  $self->base_url($ENV{MOJO_NETS_SELF_CONTAINED} =~ /^http/ ? $ENV{MOJO_NETS_SELF_CONTAINED} : '');
+  $self->base_url('/nets');
 
-  $r->get('/Netaxept/Process.aspx')->to(cb => sub { shift->render('netspayment/process'); }, format => 'aspx');
-  $r->get('/Netaxept/Query.aspx')->to(cb => sub { shift->render('netspayment/query'); }, format => 'aspx');
-  $r->get('/Netaxept/Register.aspx')->to(cb => sub {
+  $r->get('/nets/Netaxept/Process.aspx')->to(cb => sub {
+    shift->render('nets/Netaxept/Process', format => 'aspx');
+  });
+  $r->get('/nets/Netaxept/Query.aspx')->to(cb => sub {
+    shift->render('nets/Netaxept/Query', format => 'aspx');
+  });
+  $r->get('/nets/Netaxept/Register.aspx')->to(cb => sub {
     my $self = shift;
     my $txn_id = 'b127f98b77f741fca6bb49981ee6e846';
-    $txn2url{$txn_id} = $self->param('redirectUrl') || 'missing';
-    $self->render('netspayment/register', txn_id => $txn_id, format => 'aspx');
+    $payments->{$txn_id} = $self->req->query_params->to_hash;
+    $self->render('nets/Netaxept/Register', txn_id => $txn_id, format => 'aspx');
   });
-  $r->get('/Terminal/default.aspx')->to(cb => sub {
+  $r->get('/nets/Terminal/default.aspx')->to(cb => sub {
     my $self = shift;
     my $txn_id = $self->param('transactionId') || 'missing';
-    $self->render('netspayment/terminal', format => 'aspx', redirect_url => $txn2url{$txn_id});
+    $self->render('nets/Terminal/default', format => 'aspx', payment => $payments->{$txn_id});
   });
 
   push @{ $app->renderer->classes }, __PACKAGE__;
@@ -515,7 +537,8 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 1;
 
 __DATA__
-@@ layouts/netspayment_xml.aspx.ep
+@@ layouts/nets.aspx.ep
+<!DOCTYPE html>
 <html>
 <head>
   <title>Nets terminal</title>
@@ -525,12 +548,8 @@ __DATA__
 </body>
 </html>
 
-@@ layouts/netspayment_xml.aspx.ep
+@@ nets/Netaxept/Process.aspx.ep
 <?xml version="1.0" ?>
-%= content
-
-@@ netspayment/process.aspx.ep
-% layout 'netspayment_xml';
 <ProcessResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Operation>AUTH</Operation>
   <ResponseCode>OK</ResponseCode>
@@ -540,16 +559,25 @@ __DATA__
   <MerchantId>9999997</MerchantId>
 </ProcessResponse>
 
-@@ netspayment/query.aspx.ep
-% layout 'netspayment_xml';
+@@ nets/Netaxept/Query.aspx.ep
+<?xml version="1.0" ?>
+<TODO/>
 
-@@ netspayment/register.aspx.ep
-% layout 'netspayment_xml';
+@@ nets/Netaxept/Register.aspx.ep
+<?xml version="1.0" ?>
 <RegisterResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <TransactionId><%= $txn_id %></TransactionId>
 </RegisterResponse>
 
-@@ netspayment/terminal.aspx.ep
-% layout 'netspayment';
-%= join '|', $self->param;
-%= link_to 'Complete payment', url_for($redirect_url)->query({ transactionId => param('transactionId'), responseCode => 'OK' }), class => 'back'
+@@ nets/Terminal/default.aspx.ep
+% layout 'nets';
+<h1>Netaxept</h1>
+<p>This is a dummy terminal. Obviously.</p>
+<dl>
+  <dt>Merchant</dt><dd><%= $payment->{merchantId} %></dd>
+  <dt>Amount</dt><dd><%= sprintf '%.02f', $payment->{amount} / 100 %> <%= $payment->{currencyCode} %></dd>
+  <dt>Order number</dt><dd><%= $payment->{orderNumber} %></dd>
+</dl>
+<p>
+  %= link_to 'Complete payment', url_for($payment->{redirectUrl})->query({ transactionId => param('transactionId'), responseCode => 'OK' }), class => 'back'
+</p>

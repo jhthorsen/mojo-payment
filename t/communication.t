@@ -83,7 +83,7 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
 
   $url = $tx[0]->req->url;
   diag "nets register url=$url";
-  is $url->path, '/Netaxept/Register.aspx', '/Netaxept/Register.aspx';
+  is $url->path, '/nets/Netaxept/Register.aspx', '/Netaxept/Register.aspx';
   is $url->query->param('orderNumber'), '42', 'orderNumber=42';
   is $url->query->param('OS'), 'linux', 'OS=linux';
   is $url->query->param('merchantId'), 'dummy_merchant', 'merchantId=dummy_merchant';
@@ -97,7 +97,7 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
 {
   $url = Mojo::URL->new($t->tx->res->json->{location});
   diag "nets terminal url=$url";
-  is $url->path, '/Terminal/default.aspx', '/Terminal/default.aspx';
+  is $url->path, '/nets/Terminal/default.aspx', '/nets/Terminal/default.aspx';
   is $url->query->param('transactionId'), 'b127f98b77f741fca6bb49981ee6e846', 'transactionId=b127f98b77f741fca6bb49981ee6e846';
   is $url->query->param('merchantId'), 'dummy_merchant', 'merchantId=dummy_merchant';
 
@@ -105,6 +105,9 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
   $t->get_ok($url)
     ->status_is(200)
     ->element_exists('a.back', 'link back to merchant page')
+    ->text_is('dl dd:nth-of-type(1)', 'dummy_merchant', 'terminal merchantId')
+    ->text_is('dl dd:nth-of-type(2)', '100.00 NOK', 'terminal amount')
+    ->text_is('dl dd:nth-of-type(3)', '42', 'terminal orderNumber')
     ;
 }
 
