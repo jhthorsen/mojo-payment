@@ -566,6 +566,7 @@ sub register {
   # self contained
   if (ref $config->{token}) {
     $self->_add_routes($app);
+    $self->_ua->server->app($app);
     $config->{token} = ${ $config->{token} };
   }
 
