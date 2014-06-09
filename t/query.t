@@ -2,11 +2,9 @@ use Mojo::Base -base;
 use Test::Mojo;
 use Test::More;
 
-$ENV{MOJO_NETS_SELF_CONTAINED} = 1;
-
 {
   use Mojolicious::Lite;
-  plugin 'NetsPayment';
+  plugin NetsPayment => { token => \ "dummy" };
 
   get '/query' => sub {
     my $self = shift->render_later;

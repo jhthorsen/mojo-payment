@@ -1,5 +1,8 @@
 Revision history for Mojolicious-Plugin-NetsPayment
 
+0.03
+       * Replace MOJO_NETS_SELF_CONTAINED=1 with special "token"
+
 0.02     Mon Jun  9 08:27:55 2014
        * Add documentation for $res in callbacks
        * Add "/nets" prefix to self contained routes

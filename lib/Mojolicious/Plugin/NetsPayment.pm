@@ -65,21 +65,20 @@ if you are using it.
     );
   };
 
-  app->start;
+=head2 Self contained
 
-=head1 ENVIRONMENT VARIABLES
+  use Mojolicious::Lite;
 
-=head2 MOJO_NETS_DEBUG
+  plugin NetsPayment => {
+    merchant_id => '...',
+    token => \ "dummy",
+  };
 
-Get extra debug output to STDERR.
+Setting token to a reference will enable this plugin to work without a working
+nets backend. This is done by replicating the behavior of Nets. This is
+especially useful when writing unit tests.
 
-=head2 MOJO_NETS_SELF_CONTAINED
-
-Set this environment variable to a true value and this module will try to
-replicate the behavior of Nets. This is especially useful when writing
-unit tests.
-
-To mimic Nets behavior, it will add these routes to your application:
+The following routes will be added to your application to mimic nets:
 
 =over 4
 
@@ -564,9 +563,16 @@ Called when registering this plugin in the main L<Mojolicious> application.
 sub register {
   my ($self, $app, $config) = @_;
 
+  # self contained
+  if (ref $config->{token}) {
+    $self->_add_routes($app);
+    $config->{token} = ${ $config->{token} };
+  }
+
   # copy config to this object
-  $self->{$_} = $config->{$_} for grep { $self->$_ } keys %$config;
-  $self->_add_routes($app) if $ENV{MOJO_NETS_SELF_CONTAINED};
+  for (grep { $self->$_ } keys %$config) {
+    $self->{$_} = $config->{$_};
+  }
 
   $app->helper(
     nets => sub {
