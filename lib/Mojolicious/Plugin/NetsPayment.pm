@@ -593,22 +593,18 @@ sub _add_routes {
 
   $self->base_url('/nets');
 
-  $r->get('/nets/Netaxept/Process.aspx')->to(cb => sub {
-    shift->render('nets/Netaxept/Process', format => 'aspx');
-  });
-  $r->get('/nets/Netaxept/Query.aspx')->to(cb => sub {
-    shift->render('nets/Netaxept/Query', format => 'aspx');
-  });
+  $r->get('/nets/Netaxept/Process.aspx', { template => 'nets/Netaxept/Process', format => 'xml' });
+  $r->get('/nets/Netaxept/Query.aspx', { template => 'nets/Netaxept/Query', format => 'xml' });
   $r->get('/nets/Netaxept/Register.aspx')->to(cb => sub {
     my $self = shift;
     my $txn_id = 'b127f98b77f741fca6bb49981ee6e846';
     $payments->{$txn_id} = $self->req->query_params->to_hash;
-    $self->render('nets/Netaxept/Register', txn_id => $txn_id, format => 'aspx');
+    $self->render('nets/Netaxept/Register', txn_id => $txn_id, format => 'xml');
   });
   $r->get('/nets/Terminal/default.aspx')->to(cb => sub {
     my $self = shift;
     my $txn_id = $self->param('transactionId') || 'missing';
-    $self->render('nets/Terminal/default', format => 'aspx', payment => $payments->{$txn_id});
+    $self->render('nets/Terminal/default', format => 'html', payment => $payments->{$txn_id});
   });
 
   push @{ $app->renderer->classes }, __PACKAGE__;
@@ -704,7 +700,7 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 1;
 
 __DATA__
-@@ layouts/nets.aspx.ep
+@@ layouts/nets.html.ep
 <!DOCTYPE html>
 <html>
 <head>
@@ -715,7 +711,7 @@ __DATA__
 </body>
 </html>
 
-@@ nets/Netaxept/Process.aspx.ep
+@@ nets/Netaxept/Process.xml.ep
 <?xml version="1.0" ?>
 <ProcessResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Operation>AUTH</Operation>
@@ -726,7 +722,7 @@ __DATA__
   <MerchantId>9999997</MerchantId>
 </ProcessResponse>
 
-@@ nets/Netaxept/Query.aspx.ep
+@@ nets/Netaxept/Query.xml.ep
 <?xml version="1.0" ?>
 <PaymentInfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <MerchantId>9999997</MerchantId>
@@ -786,13 +782,13 @@ __DATA__
   <AvtaleGiroInformation />
 </PaymentInfo>
 
-@@ nets/Netaxept/Register.aspx.ep
+@@ nets/Netaxept/Register.xml.ep
 <?xml version="1.0" ?>
 <RegisterResponse xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <TransactionId><%= $txn_id %></TransactionId>
 </RegisterResponse>
 
-@@ nets/Terminal/default.aspx.ep
+@@ nets/Terminal/default.html.ep
 % layout 'nets';
 <h1>Netaxept</h1>
 <p>This is a dummy terminal. Obviously.</p>
