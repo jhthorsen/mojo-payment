@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::NetsPayment - Make payments using Nets
 
 VERSION
-    0.02
+    0.03
 
 DESCRIPTION
     Mojolicious::Plugin::NetsPayment is a plugin for the Mojolicious web
@@ -60,18 +60,19 @@ SYNOPSIS
         );
       };
 
-      app->start;
+  Self contained
+      use Mojolicious::Lite;
 
-ENVIRONMENT VARIABLES
-  MOJO_NETS_DEBUG
-    Get extra debug output to STDERR.
+      plugin NetsPayment => {
+        merchant_id => '...',
+        token => \ "dummy",
+      };
 
-  MOJO_NETS_SELF_CONTAINED
-    Set this environment variable to a true value and this module will try
-    to replicate the behavior of Nets. This is especially useful when
-    writing unit tests.
+    Setting token to a reference will enable this plugin to work without a
+    working nets backend. This is done by replicating the behavior of Nets.
+    This is especially useful when writing unit tests.
 
-    To mimic Nets behavior, it will add these routes to your application:
+    The following routes will be added to your application to mimic nets:
 
     *   /nets/Netaxept/Process.aspx
 

@@ -6,15 +6,10 @@ WriteMakefile(
   AUTHOR => 'Jan Henning Thorsen <jhthorsen@cpan.org>',
   LICENSE => 'perl',
   PREREQ_PM => {
-    'EV' => '4.17',
-    'IO::Socket::IP' => '0.29',
-    'IO::Socket::SSL' => '1.981',
-    'Net::SSLeay' => '1.58',
-    'URI::_punycode' => '0.04',
-    'common::sense' => '3.73',
+    'Mojolicious' => '5.00',
   },
   BUILD_REQUIRES => {
-
+    'Test::More' => '0.90',
   },
   META_MERGE => {
     resources => {
@@ -27,6 +22,4 @@ WriteMakefile(
   test => {
     TESTS => 't/*.t',
   },
-  #MIN_PERL_VERSION => 5.10,
-  #EXE_FILES => ['bin/my-app'],
 );
