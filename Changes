@@ -1,5 +1,12 @@
 Revision history for Mojolicious-Plugin-NetsPayment
 
+0.02     Mon Jun  9 08:27:55 2014
+       * Add documentation for $res in callbacks
+       * Add "/nets" prefix to self contained routes
+       * Change path to self contained templates
+       * Error messages are stored in $res->param(...)
+       * Implemented query_payment()
+
 0.01     Sat Jun  7 18:43:48 2014
        * Started project
        * Add cool feature
