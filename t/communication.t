@@ -4,6 +4,8 @@ use Test::More;
 
 $ENV{MOJO_NETS_SELF_CONTAINED} = 1;
 
+$^O = 'CoolestOperatingSystem';
+
 {
   use Mojolicious::Lite;
   plugin NetsPayment => { token => \ "dummy" };
@@ -95,7 +97,7 @@ $t->app->nets->_ua->on(start => sub { push @tx, pop });
   diag "nets register url=$url";
   is $url->path, '/nets/Netaxept/Register.aspx', '/Netaxept/Register.aspx';
   is $url->query->param('orderNumber'), '42', 'orderNumber=42';
-  is $url->query->param('OS'), 'linux', 'OS=linux';
+  is $url->query->param('OS'), 'CoolestOperatingSystem', 'OS=CoolestOperatingSystem';
   is $url->query->param('merchantId'), 'dummy_merchant', 'merchantId=dummy_merchant';
   like $url->query->param('redirectUrl'), qr{/checkout\?}, 'redirectUrl=/checkout';
   is $url->query->param('currencyCode'), 'NOK', 'currencyCode=NOK';
