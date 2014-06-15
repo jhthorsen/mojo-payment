@@ -1,0 +1,119 @@
+NAME
+    Mojolicious::Plugin::PayPal - Make payments using PayPal
+
+VERSION
+    0.01
+
+DESCRIPTION
+    Mojolicious::Plugin::PayPal is a plugin for the Mojolicious web
+    framework which allow you to do payments using
+    <https://www.paypal.com|PayPal>.
+
+    This module is EXPERIMENTAL. The API can change at any time. Let me know
+    if you are using it.
+
+    See also
+    <https://developer.paypal.com/webapps/developer/docs/integration/web/acc
+    ept-paypal-payment/>.
+
+SYNOPSIS
+      use Mojolicious::Lite;
+
+ATTRIBUTES
+  base_url
+      $str = $self->base_url;
+
+    This is the location to PayPal payment solution. Will be set to
+    <https://api.paypal.com> if the mojolicious application mode is
+    "production" or <https://api.sandbox.paypal.com>.
+
+  client_id
+      $str = $self->client_id;
+
+    The value used as username when fetching the the access token. This can
+    be found in "Applications tab" in the PayPal Developer site.
+
+  currency_code
+      $str = $self->currency_code;
+
+    The currency code. Default is "USD".
+
+  secret
+      $str = $self->secret;
+
+    The value used as password when fetching the the access token. This can
+    be found in "Applications tab" in the PayPal Developer site.
+
+HELPERS
+  paypal
+      $self = $c->paypal;
+      $c = $c->paypal($method => @args);
+
+    Returns this instance unless any args have been given or calls one of
+    the available "METHODS" instead. $method need to be without "_payment"
+    at the end. Example:
+
+      $c->paypal(register => { ... }, sub {
+        my ($c, $res) = @_;
+        # ...
+      });
+
+METHODS
+  execute_payment
+      $self = $self->execute_payment(
+        $c,
+        {
+        },
+        sub {
+          my ($self, $res) = @_;
+        },
+      );
+
+  register_payment
+      $self = $self->register_payment(
+        $c,
+        {
+          amount => $num, # 99.90, not 9990
+          redirect_url => $str, # default to current request URL
+          # ...
+        },
+        sub {
+          my ($self, $res) = @_;
+        },
+      );
+
+    The "register_payment" method is used to send the required payment
+    details to PayPal which will later be approved by the user after being
+    redirected to the PayPal terminal page.
+
+    Useful $res values:
+
+    *   $res->code
+
+        Set to 302 on success.
+
+    *   $res->param("transaction_id")
+
+        Only set on success. An ID identifying this transaction. Generated
+        by PayPal.
+
+    *   $res->headers->location
+
+        Only set on success. This holds a URL to the PayPal terminal page,
+        which you will redirect the user to after storing the transaction ID
+        and other customer related details.
+
+  register
+      $app->plugin(PayPal => \%config);
+
+    Called when registering this plugin in the main Mojolicious application.
+
+COPYRIGHT AND LICENSE
+    Copyright (C) 2014, Jan Henning Thorsen
+
+    This program is free software, you can redistribute it and/or modify it
+    under the terms of the Artistic License version 2.0.
+
+AUTHOR
+    Jan Henning Thorsen - "jhthorsen@cpan.org"
+
