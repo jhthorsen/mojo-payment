@@ -4,14 +4,14 @@ use Test::More;
 
 {
   use Mojolicious::Lite;
-  plugin PayPal => { token => \ "dummy" };
+  plugin PayPal => { secret => \ "dummy" };
 
   # register a payment and send the visitor to PayPal payment terminal
   post '/checkout' => sub {
     my $self = shift->render_later;
     my %payment = (
       amount => scalar $self->param('amount'),
-      order_number => scalar $self->param('order_number'),
+      description => 'Some description',
     );
 
     Mojo::IOLoop->delay(
@@ -41,7 +41,7 @@ use Test::More;
     Mojo::IOLoop->delay(
       sub {
         my ($delay) = @_;
-        $self->paypal(process => {}, $delay->begin);
+        $self->paypal(execute => {}, $delay->begin);
       },
       sub {
         my ($delay, $res) = @_;
@@ -78,26 +78,29 @@ $t->app->paypal->_ua->on(start => sub { push @tx, pop });
     ->status_is(302)
     ->json_is('/advice', undef)
     ->json_is('/message', undef)
-    ->json_is('/transaction_id', 'b127f98b77f741fca6bb49981ee6e846')
+    ->json_is('/transaction_id', 'PAY-6RV70583SB702805EKEYSZ6Y')
     ;
 
   $url = $tx[0]->req->url;
+  diag "paypal oauth2 url=$url";
+  is $url->path, '/paypal/v1/oauth2/token', '/paypal/v1/oauth2/token';
+
+  $url = $tx[1]->req->url;
   diag "paypal register url=$url";
-  is $url->path, 'register_url', 'register_url';
+  is $url->path, '/paypal/v1/payments/payment', '/paypal/v1/payments/payment';
 }
 
 {
   $url = Mojo::URL->new($t->tx->res->json->{location});
   diag "paypal terminal url=$url";
-  is $url->path, 'terminal_url', 'terminal_url';
+  is $url->path, '/paypal/webscr', '/paypal/webscr';
 
   diag 'Step 2';
   $t->get_ok($url)
     ->status_is(200)
     ->element_exists('a.back', 'link back to merchant page')
-    ->text_is('dl dd:nth-of-type(1)', 'dummy_client', 'terminal dummy_client')
-    ->text_is('dl dd:nth-of-type(2)', '100.00 NOK', 'terminal amount')
-    ->text_is('dl dd:nth-of-type(3)', 'Some description', 'terminal description')
+    ->text_is('dl dd:nth-of-type(1)', '100 USD', 'terminal amount')
+    ->text_is('dl dd:nth-of-type(2)', 'paypal', 'terminal payment method')
     ;
 }
 
@@ -110,7 +113,6 @@ $t->app->paypal->_ua->on(start => sub { push @tx, pop });
 
   # params from the original test url
   is $url->query->param('amount'), '100', 'amount=100';
-  is $url->query->param('order_number'), '42', 'order_number=42';
 
   diag 'Step 3 + 4';
   $t->get_ok($url)

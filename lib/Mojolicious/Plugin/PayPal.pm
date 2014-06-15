@@ -66,8 +66,7 @@ This can be found in "Applications tab" in the PayPal Developer site.
 has base_url => 'https://api.sandbox.paypal.com';
 has client_id => 'dummy_client';
 has currency_code => 'USD';
-has token => 'dummy_token';
-has _access_token => sub { +{ value => '', expires_in => 0 } };
+has secret => 'dummy_secret';
 has _ua => sub { Mojo::UserAgent->new; };
 
 =head1 HELPERS
@@ -132,23 +131,18 @@ sub register_payment {
   my ($self, $c, $args, $cb) = @_;
   my $register_url = $self->_url('/v1/payments/payment');
   my $redirect_url = Mojo::URL->new($args->{redirect_url} = $c->req->url->to_abs);
-  my (%body, %headers);
+  my %body;
 
   $args->{amount} or return $self->$cb($self->_error('amount missing in input'));
 
-  %headers = (
-    'Content-Type' => 'application/json',
-    'Authorization' => $self->_authorization_header,
-  );
-
   %body = (
-    intent => "sale",
+    intent => 'sale',
     redirect_urls => {
-      return_url => $redirect_url->to_abs,
-      cancel_url => $redirect_url->to_abs,
+      return_url => $redirect_url->query(accepted => 1)->to_abs,
+      cancel_url => $redirect_url->query(accepted => 0)->to_abs,
     },
     payer => {
-      payment_method => "paypal",
+      payment_method => 'paypal',
     },
     transactions => [
       {
@@ -164,7 +158,7 @@ sub register_payment {
   Mojo::IOLoop->delay(
     sub {
       my ($delay) = @_;
-      $self->_ua->get($register_url, \%headers, j(\%body), $delay->begin);
+      return $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
     },
     sub {
       my ($delay, $tx) = @_;
@@ -177,17 +171,18 @@ sub register_payment {
         my $json = $res->json;
         my $terminal_url;
 
-        $json->{id} or die "No transaction ID in response from PayPal";
+        $json->{id} or die 'No transaction ID in response from PayPal';
+        $json->{state} eq 'created' or die $json->{state};
 
         for my $link (@{ $json->{links} }) {
           my $key = "$link->{rel}_url";
           $key =~ s!_url_url$!_url!;
-          $self->param($key => $link->{href});
+          $res->param($key => $link->{href});
         }
 
         $res->param(state => $json->{state});
         $res->param(transaction_id => $json->{id});
-        $res->headers->location($self->param('approval_url'));
+        $res->headers->location($res->param('approval_url'));
         $res->code(302);
         1;
       } or do {
@@ -214,10 +209,10 @@ sub register {
   my ($self, $app, $config) = @_;
 
   # self contained
-  if (ref $config->{token}) {
-    $self->_add_routes($app); # TODO
+  if (ref $config->{secret}) {
+    $self->_add_routes($app);
     $self->_ua->server->app($app);
-    $config->{token} = ${ $config->{token} };
+    $config->{secret} = ${ $config->{secret} };
   }
   elsif ($app->mode eq 'production') {
     $config->{base_url} ||= 'https://api.paypal.com';
@@ -246,12 +241,15 @@ sub _add_routes {
 
   $self->base_url('/paypal');
 
-  $r->get('/paypal/v1/payments/payment' => sub {
+  $r->get('/paypal/v1/oauth2/token' => { template => 'paypal/v1/oauth2/token', format => 'json' });
+
+  $r->post('/paypal/v1/payments/payment' => sub {
     my $self = shift;
     my $token = 'EC-60U79048BN7719609';
     $payments->{$token} = $self->req->json;
     $self->render('paypal/v1/payments/payment', token => $token, format => 'json');
   });
+
   $r->get('/paypal/webscr')->to(cb => sub {
     my $self = shift;
     my $token = $self->param('token') || 'missing';
@@ -259,12 +257,6 @@ sub _add_routes {
   });
 
   push @{ $app->renderer->classes }, __PACKAGE__;
-}
-
-sub _authorization_header {
-  my $self = shift;
-
-  return sprintf 'Bearer %s', $self->_access_token
 }
 
 sub _error {
@@ -284,6 +276,58 @@ sub _extract_error {
   $res->code(500);
   $res->param(message => $err // $e);
   $res->param(source => $err ? $self->base_url : __PACKAGE__);
+}
+
+sub _get_access_token {
+  my ($self, $cb) = @_;
+  my $token_url = $self->_url('/v1/oauth2/token');
+  my %headers = ( 'Accept' => 'application/json', 'Accept-Language' => 'en_US' );
+
+  $token_url->userinfo(join ':', $self->client_id, $self->secret);
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_ua->get($token_url, \%headers, 'grant_type=client_credentials', $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $json = eval { $tx->res->json } || {};
+
+      $self->$cb($self->{access_token} = $json->{access_token}, $tx);
+    },
+  );
+}
+
+# https://developer.paypal.com/webapps/developer/docs/integration/direct/make-your-first-call/
+sub _make_request_with_token {
+  my ($self, $method, $url, $body, $cb) = @_;
+  my %headers = ( 'Content-Type' => 'application/json' );
+
+  Mojo::IOLoop->delay(
+    sub { # get token unless we have it
+      my ($delay) = @_;
+      return $delay->pass($self->{access_token}, undef) if $self->{access_token};
+      return $self->_get_access_token($delay->begin);
+    },
+    sub { # abort or make request with token
+      my ($delay, $token, $tx) = @_;
+      return $self->$cb($tx) unless $token;
+      $headers{Authorization} = $token;
+      return $self->_ua->$method($url, \%headers, $body, $delay->begin);
+    },
+    sub { # get token if it has expired
+      my ($delay, $tx) = @_;
+      return $self->_get_access_token($delay->begin) if $tx->res->code == 401;
+      return $delay->pass(undef, $tx); # success
+    },
+    sub { # return or retry request with new token
+      my ($delay, $token, $tx) = @_;
+      return $self->$cb($tx) unless $token; # return success or error $tx
+      $headers{Authorization} = $token;
+      return $self->_ua->$method($url, \%headers, $body, $cb);
+    },
+  );
 }
 
 sub _url {
@@ -328,8 +372,18 @@ __DATA__
   <dt>Payment method</dt><dd><%= $payment->{payer}{payment_method} %></dd>
 </dl>
 <p>
-  %= link_to 'Complete payment', url_for($payment->{redirectUrl})->query({ token => param('token') }), class => 'back'
+  %= link_to 'Complete payment', url_for($payment->{redirectUrl})->query({ token => param('token'), accepted => 1 }), class => 'back'
+  %= link_to 'Cancel payment', url_for($payment->{redirectUrl})->query({ token => param('token') }), class => 'cancel'
 </p>
+
+@@ paypal/v1/oauth2/token.json.ep
+{
+  "scope": "https://api.paypal.com/v1/payments/.* https://api.paypal.com/v1/vault/credit-card https://api.paypal.com/v1/vault/credit-card/.*",
+  "access_token": "80R95024SS305861X",
+  "token_type": "Bearer",
+  "app_id": "APP-6XR95014SS315863X",
+  "expires_in": 28800
+}
 
 @@ paypal/v1/payments/payment.json.ep
 {
