@@ -1,4 +1,6 @@
 Revision history for Mojolicious-Plugin-PayPal
 
 0.01
-       * Started project
+       * Add register_payment()
+       * Add process_payment()
+       * Add dummy routes

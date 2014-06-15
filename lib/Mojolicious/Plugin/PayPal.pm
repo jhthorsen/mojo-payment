@@ -117,6 +117,80 @@ the end. Example:
 
 =head1 METHODS
 
+=head2 process_payment
+
+  $self = $self->process_payment(
+    $c,
+    {
+      token => $str, # default to $c->param("token")
+      payer_id => $str, # default to $c->param("PayerID")
+    },
+    sub {
+      my ($self, $res) = @_;
+    },
+  );
+
+This is used to process the payment after a user has been redirected back
+from the PayPal terminal.
+
+See L<https://developer.paypal.com/webapps/developer/docs/api/#execute-an-approved-paypal-payment>
+for details.
+
+=cut
+
+sub process_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my %body;
+
+  $args->{token} ||= $c->param('token') or return $self->$cb($self->_error('token missing in input'));
+  $args->{payer_id} ||= $c->param('PayerID') or return $self->$cb($self->_error('PayerID missing in input'));
+
+  %body = ( payer_id => $args->{payer_id} );
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->transaction_id_mapper->($self, $args->{token}, undef, $delay->begin);
+    },
+    sub {
+      my ($delay, $err, $transaction_id) = @_;
+      return $self->$cb($self->_error($err)) if $err;
+      my $url = $self->_url("/v1/payments/payment/$transaction_id/execute");
+      $self->_make_request_with_token(post => $url, j(\%body), $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $res = $tx->res;
+
+      $res->code(0) unless $res->code;
+
+      local $@;
+      eval {
+        my $json = $res->json;
+        my $token;
+
+        $json->{id} or die 'No transaction ID in response from PayPal';
+        $json->{state} eq 'approved' or die $json->{state};
+
+        while(my($key, $value) = each { $json->{payer}{payer_info} || {} }) {
+          $res->param("payer_$key" => $value);
+        }
+
+        $res->param(state => $json->{state});
+        $res->param(transaction_id => $json->{id});
+        $res->code(200);
+        $self->$cb($res);
+        1;
+      } or do {
+        warn "[MOJO_PAYPAL] ! $@" if DEBUG;
+        $self->$cb($self->_extract_error($tx, $@));
+      };
+    },
+  );
+
+  $self;
+}
+
 =head2 register_payment
 
   $self = $self->register_payment(
@@ -188,7 +262,7 @@ sub register_payment {
   Mojo::IOLoop->delay(
     sub {
       my ($delay) = @_;
-      return $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
+      $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
     },
     sub {
       my ($delay, $tx) = @_;
@@ -221,8 +295,7 @@ sub register_payment {
         1;
       } or do {
         warn "[MOJO_PAYPAL] ! $@" if DEBUG;
-        $self->_extract_error($tx, $@);
-        $delay->pass($res, undef, undef);
+        $delay->pass($self->_extract_error($tx, $@));
       };
     },
     sub {
@@ -323,6 +396,7 @@ sub _extract_error {
   $res->code(500);
   $res->param(message => $err // $e);
   $res->param(source => $err ? $self->base_url : __PACKAGE__);
+  $res;
 }
 
 sub _get_access_token {

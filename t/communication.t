@@ -41,7 +41,7 @@ use Test::More;
     Mojo::IOLoop->delay(
       sub {
         my ($delay) = @_;
-        $self->paypal(execute => {}, $delay->begin);
+        $self->paypal(process => {}, $delay->begin);
       },
       sub {
         my ($delay, $res) = @_;
