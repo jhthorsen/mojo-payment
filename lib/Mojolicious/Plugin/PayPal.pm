@@ -241,6 +241,24 @@ sub register {
 
 sub _add_routes {
   my ($self, $app) = @_;
+  my $r = $app->routes;
+  my $payments = $self->{payments} ||= {}; # just here for debug purposes, may change without warning
+
+  $self->base_url('/paypal');
+
+  $r->get('/paypal/v1/payments/payment' => sub {
+    my $self = shift;
+    my $token = 'EC-60U79048BN7719609';
+    $payments->{$token} = $self->req->json;
+    $self->render('paypal/v1/payments/payment', token => $token, format => 'json');
+  });
+  $r->get('/paypal/webscr')->to(cb => sub {
+    my $self = shift;
+    my $token = $self->param('token') || 'missing';
+    $self->render('paypal/webscr', format => 'html', payment => $payments->{$token});
+  });
+
+  push @{ $app->renderer->classes }, __PACKAGE__;
 }
 
 sub _authorization_header {
@@ -288,3 +306,68 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 =cut
 
 1;
+
+__DATA__
+@@ layouts/paypal.html.ep
+<!DOCTYPE html>
+<html>
+<head>
+  <title>PayPal terminal</title>
+</head>
+<body>
+%= content
+</body>
+</html>
+
+@@ paypal/webscr.html.ep
+% layout 'nets';
+<h1>PayPal</h1>
+<p>This is a dummy terminal. Obviously.</p>
+<dl>
+  <dt>Amount</dt><dd><%= $payment->{transactions}[0]{amount}{total} %> <%= $payment->{transactions}[0]{amount}{currency} %></dd>
+  <dt>Payment method</dt><dd><%= $payment->{payer}{payment_method} %></dd>
+</dl>
+<p>
+  %= link_to 'Complete payment', url_for($payment->{redirectUrl})->query({ token => param('token') }), class => 'back'
+</p>
+
+@@ paypal/v1/payments/payment.json.ep
+{
+  "id": "PAY-6RV70583SB702805EKEYSZ6Y",
+  "create_time": "2013-03-01T22:34:35Z",
+  "update_time": "2013-03-01T22:34:36Z",
+  "state": "created",
+  "intent": "sale",
+  "payer": {
+    "payment_method": "paypal"
+  },
+  "transactions": [
+    {
+      "amount": {
+        "total": "7.47",
+        "currency": "USD",
+        "details": {
+          "subtotal": "7.47"
+        }
+      },
+      "description": "This is the payment transaction description."
+    }
+  ],
+  "links": [
+    {
+      "href": "/paypal/v1/payments/payment/PAY-6RV70583SB702805EKEYSZ6Y",
+      "rel": "self",
+      "method": "GET"
+    },
+    {
+      "href": "/paypal/webscr?cmd=_express-checkout&token=EC-60U79048BN7719609",
+      "rel": "approval_url",
+      "method": "REDIRECT"
+    },
+    {
+      "href": "/paypal/v1/payments/payment/PAY-6RV70583SB702805EKEYSZ6Y/execute",
+      "rel": "execute",
+      "method": "POST"
+    }
+  ]
+}
