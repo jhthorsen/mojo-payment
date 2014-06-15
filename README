@@ -19,6 +19,23 @@ DESCRIPTION
 SYNOPSIS
       use Mojolicious::Lite;
 
+  Transaction ID mapper
+    You should provide a "transaction_id_mapper". Here is an example code on
+    how to do that:
+
+      $app->paypal->transaction_id_mapper(sub {
+        my ($self, $token, $transaction_id, $cb) = @_;
+
+        if($transaction_id) {
+          eval { My::DB->store_transaction_id($token => $transaction_id); };
+          $self->$cb($@, $transaction_id);
+        }
+        else {
+          my $transaction_id = eval { My::DB->get_transaction_id($token)); };
+          $self->$cb($@, $transaction_id);
+        }
+      });
+
 ATTRIBUTES
   base_url
       $str = $self->base_url;
@@ -37,6 +54,17 @@ ATTRIBUTES
       $str = $self->currency_code;
 
     The currency code. Default is "USD".
+
+  transaction_id_mapper
+      $code = $self->transaction_id_mapper;
+
+    Holds a code used to find the transaction ID, after user has been
+    redirected back from PayPal terminal page.
+
+    NOTE! The default callback provided by this module does not scale and
+    will not work in a multi-process environment, such as running under
+    "hypnotoad" or using a load balancer. You should therefor provide your
+    own backend solution. See "Transaction ID mapper" for example code.
 
   secret
       $str = $self->secret;
@@ -59,15 +87,24 @@ HELPERS
       });
 
 METHODS
-  execute_payment
-      $self = $self->execute_payment(
+  process_payment
+      $self = $self->process_payment(
         $c,
         {
+          token => $str, # default to $c->param("token")
+          payer_id => $str, # default to $c->param("PayerID")
         },
         sub {
           my ($self, $res) = @_;
         },
       );
+
+    This is used to process the payment after a user has been redirected
+    back from the PayPal terminal.
+
+    See
+    <https://developer.paypal.com/webapps/developer/docs/api/#execute-an-app
+    roved-paypal-payment> for details.
 
   register_payment
       $self = $self->register_payment(
