@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 VERSION
-    0.01
+    0.02
 
 DESCRIPTION
     Mojolicious::Plugin::PayPal is a plugin for the Mojolicious web
@@ -18,6 +18,50 @@ DESCRIPTION
 
 SYNOPSIS
       use Mojolicious::Lite;
+
+      plugin PayPal => {
+        secret => '...',
+        client_id => '...',
+      };
+
+      # register a payment and send the visitor to PayPal payment terminal
+      post '/checkout' => sub {
+        my $self = shift->render_later;
+        my %payment = (
+          amount => scalar $self->param('amount'),
+          description => 'Some description',
+        );
+
+        Mojo::IOLoop->delay(
+          sub {
+            my ($delay) = @_;
+            $self->paypal(register => \%payment, $delay->begin);
+          },
+          sub {
+            my ($delay, $res) = @_;
+            return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+            # store $res->param('transaction_id');
+            $self->redirect_to($res->headers->location);
+          },
+        );
+      };
+
+      # after redirected back from PayPal payment terminal
+      get '/checkout' => sub {
+        my $self = shift->render_later;
+
+        Mojo::IOLoop->delay(
+          sub {
+            my ($delay) = @_;
+            $self->paypal(process => {}, $delay->begin);
+          },
+          sub {
+            my ($delay, $res) = @_;
+            return $self->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
+            return $self->render(text => "yay!");
+          },
+        );
+      };
 
   Transaction ID mapper
     You should provide a "transaction_id_mapper". Here is an example code on

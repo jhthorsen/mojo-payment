@@ -6,7 +6,7 @@ Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 =head1 VERSION
 
-0.01
+0.02
 
 =head1 DESCRIPTION
 
@@ -21,6 +21,51 @@ See also L<https://developer.paypal.com/webapps/developer/docs/integration/web/a
 =head1 SYNOPSIS
 
   use Mojolicious::Lite;
+
+  plugin PayPal => {
+    secret => '...',
+    client_id => '...',
+  };
+
+  # register a payment and send the visitor to PayPal payment terminal
+  post '/checkout' => sub {
+    my $self = shift->render_later;
+    my %payment = (
+      amount => scalar $self->param('amount'),
+      description => 'Some description',
+    );
+
+    Mojo::IOLoop->delay(
+      sub {
+        my ($delay) = @_;
+        $self->paypal(register => \%payment, $delay->begin);
+      },
+      sub {
+        my ($delay, $res) = @_;
+        return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+        # store $res->param('transaction_id');
+        $self->redirect_to($res->headers->location);
+      },
+    );
+  };
+
+  # after redirected back from PayPal payment terminal
+  get '/checkout' => sub {
+    my $self = shift->render_later;
+
+    Mojo::IOLoop->delay(
+      sub {
+        my ($delay) = @_;
+        $self->paypal(process => {}, $delay->begin);
+      },
+      sub {
+        my ($delay, $res) = @_;
+        return $self->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
+        return $self->render(text => "yay!");
+      },
+    );
+  };
+
 
 =head2 Transaction ID mapper
 
@@ -46,7 +91,7 @@ use Mojo::JSON 'j';
 use Mojo::UserAgent;
 use constant DEBUG => $ENV{MOJO_PAYPAL_DEBUG} || 0;
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 =head1 ATTRIBUTES
 
@@ -142,6 +187,7 @@ sub process_payment {
   my ($self, $c, $args, $cb) = @_;
   my %body;
 
+  $args->{cancel} //= $c->param('return_url') ? 0 : 1;
   $args->{token} ||= $c->param('token') or return $self->$cb($self->_error('token missing in input'));
   $args->{payer_id} ||= $c->param('PayerID') or return $self->$cb($self->_error('PayerID missing in input'));
 
@@ -156,13 +202,22 @@ sub process_payment {
       my ($delay, $err, $transaction_id) = @_;
       return $self->$cb($self->_error($err)) if $err;
       my $url = $self->_url("/v1/payments/payment/$transaction_id/execute");
+      $delay->pass($transaction_id);
       $self->_make_request_with_token(post => $url, j(\%body), $delay->begin);
     },
     sub {
-      my ($delay, $tx) = @_;
+      my ($delay, $transaction_id, $tx) = @_;
       my $res = $tx->res;
 
       $res->code(0) unless $res->code;
+      $res->param(transaction_id => $transaction_id);
+
+      if ($args->{cancel}) {
+        $res->param(message => 'Payment cancelled.');
+        $res->param(source => $self->base_url);
+        $res->code(205);
+        return $self->$cb($res);
+      }
 
       local $@;
       eval {
