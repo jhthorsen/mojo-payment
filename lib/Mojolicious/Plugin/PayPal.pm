@@ -16,6 +16,8 @@ framework which allow you to do payments using L<https://www.paypal.com|PayPal>.
 This module is EXPERIMENTAL. The API can change at any time. Let me know
 if you are using it.
 
+See also L<https://developer.paypal.com/webapps/developer/docs/integration/web/accept-paypal-payment/>.
+
 =head1 SYNOPSIS
 
   use Mojolicious::Lite;
