@@ -49,7 +49,8 @@ use Test::More;
           json => {
             message => scalar $res->param('message'),
             source => scalar $res->param('source'),
-            authorization_id => scalar $res->param('authorization_id'),
+            payer_id => scalar $res->param('payer_id'),
+            transaction_id => scalar $res->param('transaction_id'),
           },
           status => $res->code,
         );
@@ -105,19 +106,22 @@ $t->app->paypal->_ua->on(start => sub { push @tx, pop });
 }
 
 {
+  diag 'Step 2.5';
   $url = Mojo::URL->new($t->tx->res->dom->at('a.back')->{href});
 
+  diag $url;
   is $url->path, '/checkout', '/checkout';
-  is $url->query->param('responseCode'), 'OK', 'responseCode=OK';
-  is $url->query->param('transactionId'), 'b127f98b77f741fca6bb49981ee6e846', 'transactionId=b127f98b77f741fca6bb49981ee6e846';
+  is $url->query->param('token'), 'EC-60U79048BN7719609', 'token=EC-60U79048BN7719609';
+  is $url->query->param('PayerID'), '42', 'PayerID=42';
 
   # params from the original test url
-  is $url->query->param('amount'), '100', 'amount=100';
+  is $url->query->param('return_url'), '1', 'return_url=1';
 
   diag 'Step 3 + 4';
   $t->get_ok($url)
     ->status_is(200)
-    ->json_is('/authorization_id', '064392')
+    ->json_is('/payer_id', '42')
+    ->json_is('/transaction_id', 'PAY-6RV70583SB702805EKEYSZ6Y')
     ;
 }
 

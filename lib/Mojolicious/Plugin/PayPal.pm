@@ -172,10 +172,11 @@ sub process_payment {
         $json->{id} or die 'No transaction ID in response from PayPal';
         $json->{state} eq 'approved' or die $json->{state};
 
-        while(my($key, $value) = each { $json->{payer}{payer_info} || {} }) {
+        while(my($key, $value) = each %{ $json->{payer}{payer_info} || {} }) {
           $res->param("payer_$key" => $value);
         }
 
+        $res->param(payer_id => $args->{payer_id});
         $res->param(state => $json->{state});
         $res->param(transaction_id => $json->{id});
         $res->code(200);
@@ -242,8 +243,8 @@ sub register_payment {
   %body = (
     intent => 'sale',
     redirect_urls => {
-      return_url => $redirect_url->query(accepted => 1)->to_abs,
-      cancel_url => $redirect_url->query(accepted => 0)->to_abs,
+      return_url => $redirect_url->query(return_url => 1)->to_abs,
+      cancel_url => $redirect_url->to_abs,
     },
     payer => {
       payment_method => 'paypal',
@@ -373,7 +374,14 @@ sub _add_routes {
   $r->get('/paypal/webscr')->to(cb => sub {
     my $self = shift;
     my $token = $self->param('token') || 'missing';
+    $payments->{CR87QHB7JTRSC} = $payments->{$token}; # payer_id = CR87QHB7JTRSC
     $self->render('paypal/webscr', format => 'html', payment => $payments->{$token});
+  });
+
+  $r->post('/paypal/v1/payments/payment/:transaction_id/execute')->to(cb => sub {
+    my $self = shift;
+    my $payer_id = $self->req->json->{payer_id} || 'missing';
+    $self->render('paypal/v1/payments/payment/execute', payment => $payments->{$payer_id}, format => 'json');
   });
 
   push @{ $app->renderer->classes }, __PACKAGE__;
@@ -493,8 +501,8 @@ __DATA__
   <dt>Payment method</dt><dd><%= $payment->{payer}{payment_method} %></dd>
 </dl>
 <p>
-  %= link_to 'Complete payment', url_for($payment->{redirectUrl})->query({ token => param('token'), accepted => 1 }), class => 'back'
-  %= link_to 'Cancel payment', url_for($payment->{redirectUrl})->query({ token => param('token') }), class => 'cancel'
+  %= link_to 'Complete payment', Mojo::URL->new($payment->{redirect_urls}{return_url})->query({ token => 'EC-60U79048BN7719609', PayerID => '42' }), class => 'back'
+  %= link_to 'Cancel payment', Mojo::URL->new($payment->{redirect_urls}{cancel_url})->query({ token => 'EC-60U79048BN7719609', PayerID => '42' }), class => 'cancel'
 </p>
 
 @@ paypal/v1/oauth2/token.json.ep
@@ -543,6 +551,76 @@ __DATA__
       "href": "/paypal/v1/payments/payment/PAY-6RV70583SB702805EKEYSZ6Y/execute",
       "rel": "execute",
       "method": "POST"
+    }
+  ]
+}
+
+@@ paypal/v1/payments/payment/execute.json.ep
+{
+  "id": "PAY-6RV70583SB702805EKEYSZ6Y",
+  "create_time": "2013-01-30T23:44:26Z",
+  "update_time": "2013-01-30T23:44:28Z",
+  "state": "approved",
+  "intent": "sale",
+  "payer": {
+    "payment_method": "paypal",
+    "payer_info": {
+      "email": "bbuyer@example.com",
+      "first_name": "Betsy",
+      "last_name": "Buyer",
+      "payer_id": "CR87QHB7JTRSC"
+    }
+  },
+  "transactions": [
+    {
+      "amount": {
+        "total": "7.47",
+        "currency": "USD",
+        "details": {
+          "tax": "0.04",
+          "shipping": "0.06"
+        }
+      },
+      "description": "This is the payment transaction description.",
+      "related_resources": [
+        {
+          "sale": {
+            "id": "1KE4800207592173L",
+            "create_time": "2013-01-30T23:44:26Z",
+            "update_time": "2013-01-30T23:44:28Z",
+            "state": "completed",
+            "amount": {
+              "total": "7.47",
+              "currency": "USD"
+            },
+            "parent_payment": "PAY-6RV70583SB702805EKEYSZ6Y",
+            "links": [
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/sale/1KE4800207592173L",
+                "rel": "self",
+                "method": "GET"
+              },
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/sale/1KE4800207592173L/refund",
+                "rel": "refund",
+                "method": "POST"
+              },
+              {
+                "href": "https://api.sandbox.paypal.com/v1/payments/payment/PAY-6RV70583SB702805EKEYSZ6Y",
+                "rel": "parent_payment",
+                "method": "GET"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "links": [
+    {
+      "href": "https://api.sandbox.paypal.com/v1/payments/payment/PAY-34629814WL663112AKEE3AWQ",
+      "rel": "self",
+      "method": "GET"
     }
   ]
 }
