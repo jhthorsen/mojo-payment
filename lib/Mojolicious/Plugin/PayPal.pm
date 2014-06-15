@@ -217,6 +217,9 @@ sub register {
     $self->_ua->server->app($app);
     $config->{token} = ${ $config->{token} };
   }
+  elsif ($app->mode eq 'production') {
+    $config->{base_url} ||= 'https://api.paypal.com';
+  }
 
   # copy config to this object
   for (grep { $self->$_ } keys %$config) {
@@ -241,7 +244,7 @@ sub _add_routes {
 sub _authorization_header {
   my $self = shift;
 
-  return sprint 'Bearer %s', $self->_access_token
+  return sprintf 'Bearer %s', $self->_access_token
 }
 
 sub _error {
