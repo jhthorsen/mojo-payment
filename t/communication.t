@@ -2,8 +2,6 @@ use Mojo::Base -base;
 use Test::Mojo;
 use Test::More;
 
-$ENV{MOJO_NETS_SELF_CONTAINED} = 1;
-
 $^O = 'CoolestOperatingSystem';
 
 {
