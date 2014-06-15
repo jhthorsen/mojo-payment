@@ -22,6 +22,23 @@ See also L<https://developer.paypal.com/webapps/developer/docs/integration/web/a
 
   use Mojolicious::Lite;
 
+=head2 Transaction ID mapper
+
+You should provide a L</transaction_id_mapper>. Here is an example code on how to do that:
+
+  $app->paypal->transaction_id_mapper(sub {
+    my ($self, $token, $transaction_id, $cb) = @_;
+
+    if($transaction_id) {
+      eval { My::DB->store_transaction_id($token => $transaction_id); };
+      $self->$cb($@, $transaction_id);
+    }
+    else {
+      my $transaction_id = eval { My::DB->get_transaction_id($token)); };
+      $self->$cb($@, $transaction_id);
+    }
+  });
+
 =cut
 
 use Mojo::Base 'Mojolicious::Plugin';
@@ -54,6 +71,18 @@ This can be found in "Applications tab" in the PayPal Developer site.
 
 The currency code. Default is "USD".
 
+=head2 transaction_id_mapper
+
+  $code = $self->transaction_id_mapper;
+
+Holds a code used to find the transaction ID, after user has been redirected
+back from PayPal terminal page.
+
+NOTE! The default callback provided by this module does not scale and will
+not work in a multi-process environment, such as running under C<hypnotoad>
+or using a load balancer. You should therefor provide your own backend
+solution. See L</Transaction ID mapper> for example code.
+
 =head2 secret
 
   $str = $self->secret;
@@ -66,6 +95,7 @@ This can be found in "Applications tab" in the PayPal Developer site.
 has base_url => 'https://api.sandbox.paypal.com';
 has client_id => 'dummy_client';
 has currency_code => 'USD';
+has transaction_id_mapper => undef;
 has secret => 'dummy_secret';
 has _ua => sub { Mojo::UserAgent->new; };
 
@@ -169,7 +199,7 @@ sub register_payment {
       local $@;
       eval {
         my $json = $res->json;
-        my $terminal_url;
+        my $token;
 
         $json->{id} or die 'No transaction ID in response from PayPal';
         $json->{state} eq 'created' or die $json->{state};
@@ -180,17 +210,26 @@ sub register_payment {
           $res->param($key => $link->{href});
         }
 
+        $token = Mojo::URL->new($res->param('approval_url'))->query->param('token');
+
         $res->param(state => $json->{state});
         $res->param(transaction_id => $json->{id});
         $res->headers->location($res->param('approval_url'));
         $res->code(302);
+        $delay->pass($res);
+        $self->transaction_id_mapper->($self, $token => $json->{id}, $delay->begin);
         1;
       } or do {
         warn "[MOJO_PAYPAL] ! $@" if DEBUG;
         $self->_extract_error($tx, $@);
+        $delay->pass($res, undef, undef);
       };
+    },
+    sub {
+      my ($delay, $res, $err, $id) = @_;
 
-      $self->$cb($res);
+      return $self->$cb($self->_error($err)) if $err;
+      return $self->$cb($res);
     },
   );
 
@@ -221,6 +260,14 @@ sub register {
   # copy config to this object
   for (grep { $self->$_ } keys %$config) {
     $self->{$_} = $config->{$_};
+  }
+
+  unless ($self->transaction_id_mapper) {
+    $self->transaction_id_mapper(sub {
+      my ($self, $token, $transaction_id, $cb) = @_;
+      $app->log->warn("You need to set 'transaction_id_mapper' in Mojolicious::Plugin::PayPal");
+      $self->$cb('', $self->{transaction_id_map}{$token} //= $transaction_id);
+    });
   }
 
   $app->helper(
