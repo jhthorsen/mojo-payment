@@ -569,6 +569,9 @@ sub register {
     $self->_ua->server->app($app);
     $config->{token} = ${ $config->{token} };
   }
+  elsif ($app->mode eq 'production') {
+    $config->{base_url} ||= 'https://epayment.nets.eu';
+  }
 
   # copy config to this object
   for (grep { $self->$_ } keys %$config) {
