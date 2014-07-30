@@ -1,11 +1,5 @@
-^mypp.yml
-.git
-\.old
-\.swp
-~$
-^blib/
-^Makefile$
-^MANIFEST.*
-^MYMETA.*
-^Mojolicious-Plugin-PayPal
-^README.pod
+#!include_default
+\.swp$
+^local/
+^MANIFEST\.SKIP
+^README\.pod
