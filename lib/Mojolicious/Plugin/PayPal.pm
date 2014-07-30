@@ -417,7 +417,7 @@ sub _add_routes {
 
   $self->base_url('/paypal');
 
-  $r->get('/paypal/v1/oauth2/token' => { template => 'paypal/v1/oauth2/token', format => 'json' });
+  $r->post('/paypal/v1/oauth2/token' => { template => 'paypal/v1/oauth2/token', format => 'json' });
 
   $r->post('/paypal/v1/payments/payment' => sub {
     my $self = shift;
@@ -472,7 +472,7 @@ sub _get_access_token {
   Mojo::IOLoop->delay(
     sub {
       my ($delay) = @_;
-      $self->_ua->get($token_url, \%headers, 'grant_type=client_credentials', $delay->begin);
+      $self->_ua->post($token_url, \%headers, form => { grant_type => 'client_credentials' }, $delay->begin);
     },
     sub {
       my ($delay, $tx) = @_;
@@ -497,7 +497,7 @@ sub _make_request_with_token {
     sub { # abort or make request with token
       my ($delay, $token, $tx) = @_;
       return $self->$cb($tx) unless $token;
-      $headers{Authorization} = $token;
+      $headers{Authorization} = "Bearer $token";
       return $self->_ua->$method($url, \%headers, $body, $delay->begin);
     },
     sub { # get token if it has expired
@@ -508,7 +508,7 @@ sub _make_request_with_token {
     sub { # return or retry request with new token
       my ($delay, $token, $tx) = @_;
       return $self->$cb($tx) unless $token; # return success or error $tx
-      $headers{Authorization} = $token;
+      $headers{Authorization} = "Bearer $token";
       return $self->_ua->$method($url, \%headers, $body, $cb);
     },
   );

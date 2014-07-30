@@ -1,5 +1,8 @@
 Revision history for Mojolicious-Plugin-PayPal
 
+0.03
+       * Fix getting access token and using it
+
 0.02     Sun Jun 15 21:20:36 2014
        * Add SYNOPSIS
        * Handle "cancel" callback
