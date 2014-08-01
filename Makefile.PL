@@ -19,6 +19,7 @@ WriteMakefile(
 }
 ,
   PREREQ_PM => {
+  'IO::Socket::SSL' => '1.84',
   'Mojolicious' => '5.13'
 }
 ,

@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 VERSION
-    0.03
+    0.04
 
 DESCRIPTION
     Mojolicious::Plugin::PayPal is a plugin for the Mojolicious web
@@ -197,4 +197,7 @@ COPYRIGHT AND LICENSE
 
 AUTHOR
     Jan Henning Thorsen - "jhthorsen@cpan.org"
+
+CONTRIBUTORS
+    Yu Pan - "yu.pan1005@gmail.com"
 
