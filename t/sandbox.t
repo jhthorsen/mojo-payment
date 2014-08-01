@@ -2,13 +2,13 @@ use Mojo::Base -base;
 use Test::Mojo;
 use Test::More;
 
-plan skip_all => 'TEST_PAYPAL_SANDBOX=1 is not set' unless $ENV{TEST_PAYPAL_SANDBOX};
+plan skip_all => 'TEST_PAYPAL_SANDBOX=1 is not set' unless $ENV{TEST_PAYPAL_SANDBOX} or $ENV{PAYPAL_CLIENT_ID} or $ENV{PAYPAL_SECRET};
 
 {
   use Mojolicious::Lite;
   plugin PayPal => {
-    client_id => 'EOJ2S-Z6OoN_le_KS1d75wsZ6y0SFdVsY9183IvxFyZp',
-    secret => 'EClusMEUk8e9ihI7ZdVLF5cZ6y0SFdVsY9183IvxFyZp',
+    client_id => $ENV{PAYPAL_CLIENT_ID} || 'EOJ2S-Z6OoN_le_KS1d75wsZ6y0SFdVsY9183IvxFyZp',
+    secret => $ENV{PAYPAL_SECRET} || 'EClusMEUk8e9ihI7ZdVLF5cZ6y0SFdVsY9183IvxFyZp',
   };
 
   # register a payment and send the visitor to PayPal payment terminal
@@ -32,30 +32,6 @@ plan skip_all => 'TEST_PAYPAL_SANDBOX=1 is not set' unless $ENV{TEST_PAYPAL_SAND
             source => scalar $res->param('source'),
             transaction_id => scalar $res->param('transaction_id'),
             location => $res->headers->location,
-          },
-          status => $res->code,
-        );
-      },
-    );
-  };
-
-  # after redirected back from PayPal payment terminal
-  get '/checkout' => sub {
-    my $self = shift->render_later;
-
-    Mojo::IOLoop->delay(
-      sub {
-        my ($delay) = @_;
-        $self->paypal(process => {}, $delay->begin);
-      },
-      sub {
-        my ($delay, $res) = @_;
-        $self->render(
-          json => {
-            message => scalar $res->param('message'),
-            source => scalar $res->param('source'),
-            payer_id => scalar $res->param('payer_id'),
-            transaction_id => scalar $res->param('transaction_id'),
           },
           status => $res->code,
         );
