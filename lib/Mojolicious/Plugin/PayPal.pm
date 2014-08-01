@@ -535,6 +535,10 @@ the terms of the Artistic License version 2.0.
 
 Jan Henning Thorsen - C<jhthorsen@cpan.org>
 
+=head1 CONTRIBUTORS
+
+Yu Pan - C<yu.pan1005@gmail.com>
+
 =cut
 
 1;

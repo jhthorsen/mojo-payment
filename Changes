@@ -2,6 +2,7 @@ Revision history for Mojolicious-Plugin-PayPal
 
 0.04
        * Add IO::Socket::SSL as dependency
+       * Add Yu Pan as contributor
 
 0.03     Wed Jul 30 16:38:03 2014
        * Fix getting access token and using it
