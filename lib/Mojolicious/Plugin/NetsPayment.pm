@@ -29,7 +29,7 @@ if you are using it.
   post '/checkout' => sub {
     my $self = shift->render_later;
     my %payment = (
-      amount => scalar $self->param('amount'),
+      amount => $self->param('amount'),
       order_number => scalar $self->param('order_number'),
     );
 
@@ -243,31 +243,31 @@ sub process_payment {
     },
     sub {
       my ($delay, $tx) = @_;
-      my $res = $tx->res;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
 
       local $@;
       eval {
-        my $body = $res->dom->ProcessResponse;
-        my $code = $body->ResponseCode->text;
+        my $body = $res->dom->at('ProcessResponse');
+        my $code = $body->at('ResponseCode')->text;
 
         if($code eq 'OK') {
           $res->code(200);
-          $res->param(authorization_id => $body->AuthorizationId->text);
-          $res->param(operation => $body->Operation->text);
-          $res->param(transaction_id => $body->TransactionId->text);
+          $res->param(authorization_id => $body->at('AuthorizationId')->text);
+          $res->param(operation => $body->at('Operation')->text);
+          $res->param(transaction_id => $body->at('TransactionId')->text);
         }
         else {
           $res->code(500) if $res->code == 200;
-          $res->param(message => $body->ResponseText->text);
-          $res->param(source => $body->ResponseSource->text);
+          $res->param(message => $body->at('ResponseText')->text);
+          $res->param(source => $body->at('ResponseSource')->text);
         }
 
         $res->param(code => $code);
       } or do {
         warn "[MOJO_NETS] ! $@" if DEBUG;
-        $self->_extract_error($tx, $@);
+        $self->_extract_error($res, $@);
       };
 
       $self->$cb($res);
@@ -401,42 +401,42 @@ sub query_payment {
     },
     sub {
       my ($delay, $tx) = @_;
-      my $res = $tx->res;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
 
       local $@;
       eval {
-        my $body = $res->dom->PaymentInfo;
+        my $body = $res->dom->at('PaymentInfo');
 
-        $res->param(amount            => $body->OrderInformation->Amount->text / 100);
-        $res->param(amount_captured   => $body->Summary->AmountCaptured->text / 100);
-        $res->param(amount_credited   => $body->Summary->AmountCredited->text / 100);
-        $res->param(annuled           => $body->Summary->Annuled->text eq 'true' ? 1 : 0);
-        $res->param(authorized        => $body->Summary->Authorized->text eq 'true' ? 1 : 0);
-        $res->param(currency_code     => $body->OrderInformation->Currency->text);
-        $res->param(order_description => $body->OrderInformation->OrderDescription->text);
-        $res->param(order_number      => $body->OrderInformation->OrderNumber->text);
+        $res->param(amount            => $body->at('OrderInformation > Amount')->text / 100);
+        $res->param(amount_captured   => $body->at('Summary > AmountCaptured')->text / 100);
+        $res->param(amount_credited   => $body->at('Summary > AmountCredited')->text / 100);
+        $res->param(annuled           => $body->at('Summary > Annuled')->text eq 'true' ? 1 : 0);
+        $res->param(authorized        => $body->at('Summary > Authorized')->text eq 'true' ? 1 : 0);
+        $res->param(currency_code     => $body->at('OrderInformation > Currency')->text);
+        $res->param(order_description => $body->at('OrderInformation > OrderDescription')->text);
+        $res->param(order_number      => $body->at('OrderInformation > OrderNumber')->text);
 
-        $res->param(authorization_id      => eval { $body->Summary->AuthorizationId->text });
-        $res->param(customer_address1     => eval { $body->CustomerInformation->Address1->text });
-        $res->param(customer_address2     => eval { $body->CustomerInformation->Address2->text });
-        $res->param(customer_country      => eval { $body->iCustomerInformation->Country->text });
-        $res->param(customer_email        => eval { $body->CustomerInformation->Email->text });
-        $res->param(customer_first_name   => eval { $body->CustomerInformation->FirstName->text });
-        $res->param(customer_ip           => eval { $body->CustomerInformation->IP->text });
-        $res->param(customer_last_name    => eval { $body->CustomerInformation->LastName->text });
-        $res->param(customer_number       => eval { $body->CustomerInformation->CustomerNumber->text });
-        $res->param(customer_phone_number => eval { $body->CustomerInformation->PhoneNumber->text });
-        $res->param(customer_postcode     => eval { $body->CustomerInformation->Postcode->text });
-        $res->param(expiry_date           => eval { $body->CardInformation->ExpiryDate->text });
-        $res->param(issuer_country        => eval { $body->CardInformation->IssuerCountry->text });
-        $res->param(masked_pan            => eval { $body->CardInformation->MaskedPAN->text });
-        $res->param(payment_method        => eval { $body->CardInformation->PaymentMethod->text });
+        $res->param(authorization_id      => eval { $body->at('Summary > AuthorizationId')->text });
+        $res->param(customer_address1     => eval { $body->at('CustomerInformation > Address1')->text });
+        $res->param(customer_address2     => eval { $body->at('CustomerInformation > Address2')->text });
+        $res->param(customer_country      => eval { $body->at('iCustomerInformation > Country')->text });
+        $res->param(customer_email        => eval { $body->at('CustomerInformation > Email')->text });
+        $res->param(customer_first_name   => eval { $body->at('CustomerInformation > FirstName')->text });
+        $res->param(customer_ip           => eval { $body->at('CustomerInformation > IP')->text });
+        $res->param(customer_last_name    => eval { $body->at('CustomerInformation > LastName')->text });
+        $res->param(customer_number       => eval { $body->at('CustomerInformation > CustomerNumber')->text });
+        $res->param(customer_phone_number => eval { $body->at('CustomerInformation > PhoneNumber')->text });
+        $res->param(customer_postcode     => eval { $body->at('CustomerInformation > Postcode')->text });
+        $res->param(expiry_date           => eval { $body->at('CardInformation > ExpiryDate')->text });
+        $res->param(issuer_country        => eval { $body->at('CardInformation > IssuerCountry')->text });
+        $res->param(masked_pan            => eval { $body->at('CardInformation > MaskedPAN')->text });
+        $res->param(payment_method        => eval { $body->at('CardInformation > PaymentMethod')->text });
         1;
       } or do {
         warn "[MOJO_NETS] ! $@" if DEBUG;
-        $self->_extract_error($tx, $@);
+        $self->_extract_error($res, $@);
       };
 
       $self->$cb($res);
@@ -527,13 +527,13 @@ sub register_payment {
     },
     sub {
       my ($delay, $tx) = @_;
-      my $res = $tx->res;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
 
       local $@;
       eval {
-        my $id = $res->dom->RegisterResponse->TransactionId->text;
+        my $id = $res->dom->at('RegisterResponse > TransactionId')->text;
         my $terminal_url = $self->_url('/Terminal/default.aspx')->query({merchantId => $self->merchant_id, transactionId => $id});
 
         $res->headers->location($terminal_url);
@@ -542,7 +542,7 @@ sub register_payment {
         1;
       } or do {
         warn "[MOJO_NETS] ! $@" if DEBUG;
-        $self->_extract_error($tx, $@);
+        $self->_extract_error($res, $@);
       };
 
       $self->$cb($res);
@@ -620,7 +620,7 @@ sub _camelize {
 
 sub _error {
   my ($self, $err) = @_;
-  my $res = Mojo::Message::Response->new;
+  my $res = Mojolicious::Plugin::NetsPayment::Res->new;
   $res->code(400);
   $res->param(message => $err);
   $res->param(source => __PACKAGE__);
@@ -628,8 +628,7 @@ sub _error {
 }
 
 sub _extract_error {
-  my ($self, $tx, $e) = @_;
-  my $res = $tx->res;
+  my ($self, $res, $e) = @_;
   my $err;
 
   local $@;
@@ -646,6 +645,11 @@ sub _url {
   warn "[MOJO_NETS] URL $url\n" if DEBUG;
   $url;
 }
+
+package
+  Mojolicious::Plugin::NetsPayment::Res;
+use Mojo::Base 'Mojo::Message::Response';
+sub param { shift->body_params->param(@_) }
 
 =head1 ERROR HANDLING
 
@@ -702,6 +706,7 @@ Jan Henning Thorsen - C<jhthorsen@cpan.org>
 
 1;
 
+package Mojolicious::Plugin::NetsPayment;
 __DATA__
 @@ layouts/nets.html.ep
 <!DOCTYPE html>

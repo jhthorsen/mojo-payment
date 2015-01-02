@@ -2,6 +2,7 @@ Revision history for Mojolicious-Plugin-NetsPayment
 
 0.04
        * Fix changing to production mode base_url
+       * Compatible with Mojolicious 5.48
 
 0.03     Mon Jun  9 14:40:59 2014
        * Replace MOJO_NETS_SELF_CONTAINED=1 with special "token"
