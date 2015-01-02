@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::NetsPayment - Make payments using Nets
 
 VERSION
-    0.03
+    0.04
 
 DESCRIPTION
     Mojolicious::Plugin::NetsPayment is a plugin for the Mojolicious web
@@ -24,7 +24,7 @@ SYNOPSIS
       post '/checkout' => sub {
         my $self = shift->render_later;
         my %payment = (
-          amount => scalar $self->param('amount'),
+          amount => $self->param('amount'),
           order_number => scalar $self->param('order_number'),
         );
 

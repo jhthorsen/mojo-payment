@@ -6,7 +6,7 @@ Mojolicious::Plugin::NetsPayment - Make payments using Nets
 
 =head1 VERSION
 
-0.03
+0.04
 
 =head1 DESCRIPTION
 
@@ -106,7 +106,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::UserAgent;
 use constant DEBUG => $ENV{MOJO_NETS_DEBUG} || 0;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 ATTRIBUTES
 
