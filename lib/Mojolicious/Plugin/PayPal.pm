@@ -31,7 +31,7 @@ See also L<https://developer.paypal.com/webapps/developer/docs/integration/web/a
   post '/checkout' => sub {
     my $self = shift->render_later;
     my %payment = (
-      amount => scalar $self->param('amount'),
+      amount => $self->param('amount'),
       description => 'Some description',
     );
 
@@ -207,7 +207,7 @@ sub process_payment {
     },
     sub {
       my ($delay, $transaction_id, $tx) = @_;
-      my $res = $tx->res;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
       $res->param(transaction_id => $transaction_id);
@@ -239,7 +239,7 @@ sub process_payment {
         1;
       } or do {
         warn "[MOJO_PAYPAL] ! $@" if DEBUG;
-        $self->$cb($self->_extract_error($tx, $@));
+        $self->$cb($self->_extract_error($res, $@));
       };
     },
   );
@@ -322,7 +322,7 @@ sub register_payment {
     },
     sub {
       my ($delay, $tx) = @_;
-      my $res = $tx->res;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
 
@@ -351,7 +351,7 @@ sub register_payment {
         1;
       } or do {
         warn "[MOJO_PAYPAL] ! $@" if DEBUG;
-        $delay->pass($self->_extract_error($tx, $@));
+        $delay->pass($self->_extract_error($res, $@));
       };
     },
     sub {
@@ -444,7 +444,7 @@ sub _add_routes {
 
 sub _error {
   my ($self, $err) = @_;
-  my $res = Mojo::Message::Response->new;
+  my $res = Mojolicious::Plugin::NetsPayment::Res->new;
   $res->code(400);
   $res->param(message => $err);
   $res->param(source => __PACKAGE__);
@@ -452,8 +452,7 @@ sub _error {
 }
 
 sub _extract_error {
-  my ($self, $tx, $e) = @_;
-  my $res = $tx->res;
+  my ($self, $res, $e) = @_;
   my $err = ''; # TODO
 
   $res->code(500);
@@ -524,6 +523,11 @@ sub _url {
   $url;
 }
 
+package
+  Mojolicious::Plugin::NetsPayment::Res;
+use Mojo::Base 'Mojo::Message::Response';
+sub param { shift->body_params->param(@_) }
+
 =head1 COPYRIGHT AND LICENSE
 
 Copyright (C) 2014, Jan Henning Thorsen
@@ -543,6 +547,7 @@ Yu Pan - C<yu.pan1005@gmail.com>
 
 1;
 
+package Mojolicious::Plugin::PayPal;
 __DATA__
 @@ layouts/paypal.html.ep
 <!DOCTYPE html>

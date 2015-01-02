@@ -1,5 +1,8 @@
 Revision history for Mojolicious-Plugin-PayPal
 
+0.05
+       * Compatible with Mojolicious 5.48
+
 0.04     Fri Aug  1 12:47:59 2014
        * Add IO::Socket::SSL as dependency
        * Add Yu Pan as contributor
