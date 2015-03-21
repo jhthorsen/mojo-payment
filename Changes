@@ -1,6 +1,6 @@
 Changelog for Mojolicious::Plugin::StripePayment
 
-0.01
+0.01     Sat Mar 21 15:31:45 2015
        * Can create charge
        * Can capture charge
        * Can retrieve charge
