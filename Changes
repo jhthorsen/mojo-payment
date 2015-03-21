@@ -1,5 +1,6 @@
 Changelog for Mojolicious::Plugin::StripePayment
 
 0.01
-       * Started project
-
+       * Can create charge
+       * Can capture charge
+       * Can retrieve charge
