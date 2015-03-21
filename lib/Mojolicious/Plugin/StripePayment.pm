@@ -117,31 +117,32 @@ use constant DEBUG => $ENV{MOJO_STRIPE_DEBUG} || 0;
 our $VERSION = '0.01';
 
 my @CAPTURE_KEYS = qw( amount application_fee receipt_email statement_descriptor );
-my @CHARGE_KEYS  = qw( amount application_fee receipt_email statement_descriptor currency customer source description capture );
+my @CHARGE_KEYS
+  = qw( amount application_fee receipt_email statement_descriptor currency customer source description capture );
 
 # Subject for change
-our $MOCKED_FAIL_RESPONSE = {};
+our $MOCKED_FAIL_RESPONSE       = {};
 our $MOCKED_SUCCESSFUL_RESPONSE = {
-  id => 'ch_15ceESLV2Qt9u2twk0Arv0Z8',
-  object => 'charge',
-  created => time,
-  paid => \1,
-  status => 'succeeded',
-  refunded => \0,
-  source => {},
-  balance_transaction => 'txn_14sJxWLV2Qt9u2tw35SuFG9X',
-  failure_message => undef,
-  failure_code => undef,
-  amount_refunded => 0,
-  customer => undef,
-  invoice => undef,
-  dispute => 0,
-  metadata => {},
+  id                   => 'ch_15ceESLV2Qt9u2twk0Arv0Z8',
+  object               => 'charge',
+  created              => time,
+  paid                 => \1,
+  status               => 'succeeded',
+  refunded             => \0,
+  source               => {},
+  balance_transaction  => 'txn_14sJxWLV2Qt9u2tw35SuFG9X',
+  failure_message      => undef,
+  failure_code         => undef,
+  amount_refunded      => 0,
+  customer             => undef,
+  invoice              => undef,
+  dispute              => 0,
+  metadata             => {},
   statement_descriptor => undef,
-  fraud_details => {},
-  receipt_number => undef,
-  shipping => undef,
-  refunds => {},
+  fraud_details        => {},
+  receipt_number       => undef,
+  shipping             => undef,
+  refunds              => {},
 };
 
 =head1 ATTRIBUTES
@@ -185,7 +186,7 @@ The value for the private API key. Available in the Stripe admin gui.
 =cut
 
 has base_url      => 'https://api.stripe.com/v1';
-has auto_capture       => 1;
+has auto_capture  => 1;
 has currency_code => 'USD';
 has pub_key       => 'pk_test_not_secret_at_all';
 has secret        => 'sk_test_super_secret_key';
@@ -297,9 +298,9 @@ sub register {
   # self contained
   $self->_mock_interface($app, $config) if $config->{mocked};
 
-  $app->helper('stripe.capture_charge' => sub { $self->_capture_charge(@_); });
-  $app->helper('stripe.create_charge' => sub { $self->_create_charge(@_); });
-  $app->helper('stripe.pub_key' => sub { $self->pub_key; });
+  $app->helper('stripe.capture_charge'  => sub { $self->_capture_charge(@_); });
+  $app->helper('stripe.create_charge'   => sub { $self->_create_charge(@_); });
+  $app->helper('stripe.pub_key'         => sub { $self->pub_key; });
   $app->helper('stripe.retrieve_charge' => sub { $self->_retrieve_charge(@_); });
 }
 
@@ -338,7 +339,7 @@ sub _create_charge {
     $form{$k} = $args->{$k} if defined $args->{$k};
   }
 
-  $form{amount} ||= $c->param('amount');
+  $form{amount}   ||= $c->param('amount');
   $form{currency} ||= $self->currency_code;
   $form{description} = $c->param('description') || '' unless defined $form{description};
   $form{metadata} = $self->_expand(metadata => $args) if ref $form{metadata};
@@ -351,9 +352,9 @@ sub _create_charge {
     return $c->$cb('statement_descriptor is too long', {});
   }
 
-  $form{amount} or return $c->$cb('amount is required', {});
-  $form{currency} or return $c->$cb('currency is required', {});
-  $form{source} or return $c->$cb('source/token is required', {});
+  $form{amount}   or return $c->$cb('amount is required',       {});
+  $form{currency} or return $c->$cb('currency is required',     {});
+  $form{source}   or return $c->$cb('source/token is required', {});
 
   push @{$url->path->parts}, 'charges';
   warn "[StripePayment] Charge $url $args->{amount} $args->{currency}\n" if DEBUG;
@@ -390,7 +391,7 @@ sub _mock_interface {
         $c->render(json => $MOCKED_FAIL_RESPONSE, code => 400);
       }
       else {
-        local $MOCKED_SUCCESSFUL_RESPONSE->{amount} //= $c->param('amount');
+        local $MOCKED_SUCCESSFUL_RESPONSE->{amount}   //= $c->param('amount');
         local $MOCKED_SUCCESSFUL_RESPONSE->{captured} //= $c->param('capture') // 1 ? \1 : \0;
         local $MOCKED_SUCCESSFUL_RESPONSE->{currency} //= lc $c->param('currency');
         local $MOCKED_SUCCESSFUL_RESPONSE->{description} //= $c->param('description') || '';
@@ -439,10 +440,7 @@ sub _retrieve_charge {
   push @{$url->path->parts}, 'charges', $args->{id} || 'invalid';
   warn "[StripePayment] Retrieve charge $url\n" if DEBUG;
 
-  Mojo::IOLoop->delay(
-    sub { $self->_ua->get($url, shift->begin); },
-    sub { $c->$cb($self->_tx_to_res($_[1])); },
-  );
+  Mojo::IOLoop->delay(sub { $self->_ua->get($url, shift->begin); }, sub { $c->$cb($self->_tx_to_res($_[1])); },);
 
   return $c;
 }

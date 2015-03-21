@@ -32,21 +32,16 @@ $form{amount} = 100;
 $t->post_ok('/charge', form => \%form)->status_is(200)->json_is('/oops', 'source/token is required');
 
 $form{stripeToken} = 'tok_42';
-$t->post_ok('/charge', form => \%form)->status_is(200)
-  ->json_is('/captured', Mojo::JSON->true)
-  ->json_is('/id', 'ch_15ceESLV2Qt9u2twk0Arv0Z8')
-  ->json_is('/receipt_email', undef);
+$t->post_ok('/charge', form => \%form)->status_is(200)->json_is('/captured', Mojo::JSON->true)
+  ->json_is('/id', 'ch_15ceESLV2Qt9u2twk0Arv0Z8')->json_is('/receipt_email', undef);
 
 $form{stripeToken} = 'tok_42';
 $form{stripeEmail} = 'bruce@example.com';
-$t->post_ok('/charge', form => \%form)->status_is(200)
-  ->json_is('/captured', Mojo::JSON->true)
-  ->json_is('/id', 'ch_15ceESLV2Qt9u2twk0Arv0Z8')
-  ->json_is('/receipt_email', 'bruce@example.com');
+$t->post_ok('/charge', form => \%form)->status_is(200)->json_is('/captured', Mojo::JSON->true)
+  ->json_is('/id', 'ch_15ceESLV2Qt9u2twk0Arv0Z8')->json_is('/receipt_email', 'bruce@example.com');
 
 $form{capture} = 0;
-$t->post_ok('/charge', form => \%form)->status_is(200)
-  ->json_is('/captured', Mojo::JSON->true)
+$t->post_ok('/charge', form => \%form)->status_is(200)->json_is('/captured', Mojo::JSON->true)
   ->json_is('/capture_charge', 'called');
 
 done_testing;
