@@ -320,7 +320,7 @@ sub _capture_charge {
   }
 
   push @{$url->path->parts}, 'charges', $args->{id}, 'capture';
-  warn "[StripePayment] Capture $url $args->{id}\n" if DEBUG;
+  warn "[StripePayment] Capture $url\n" if DEBUG;
 
   Mojo::IOLoop->delay(
     sub { $self->_ua->post($url, form => \%form, shift->begin); },
@@ -357,7 +357,7 @@ sub _create_charge {
   $form{source}   or return $c->$cb('source/token is required', {});
 
   push @{$url->path->parts}, 'charges';
-  warn "[StripePayment] Charge $url $args->{amount} $args->{currency}\n" if DEBUG;
+  warn "[StripePayment] Charge $url $form{amount} $form{currency}\n" if DEBUG;
 
   Mojo::IOLoop->delay(
     sub { $self->_ua->post($url, form => \%form, shift->begin); },
