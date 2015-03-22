@@ -121,28 +121,30 @@ my @CHARGE_KEYS
   = qw( amount application_fee receipt_email statement_descriptor currency customer source description capture );
 
 # Subject for change
-our $MOCKED_FAIL_RESPONSE       = {};
-our $MOCKED_SUCCESSFUL_RESPONSE = {
-  id                   => 'ch_15ceESLV2Qt9u2twk0Arv0Z8',
-  object               => 'charge',
-  created              => time,
-  paid                 => \1,
-  status               => 'succeeded',
-  refunded             => \0,
-  source               => {},
-  balance_transaction  => 'txn_14sJxWLV2Qt9u2tw35SuFG9X',
-  failure_message      => undef,
-  failure_code         => undef,
-  amount_refunded      => 0,
-  customer             => undef,
-  invoice              => undef,
-  dispute              => 0,
-  metadata             => {},
-  statement_descriptor => undef,
-  fraud_details        => {},
-  receipt_number       => undef,
-  shipping             => undef,
-  refunds              => {},
+our $MOCKED_RESPONSE = {
+  status => 200,
+  json   => {
+    id                   => 'ch_15ceESLV2Qt9u2twk0Arv0Z8',
+    object               => 'charge',
+    created              => time,
+    paid                 => \1,
+    status               => 'succeeded',
+    refunded             => \0,
+    source               => {},
+    balance_transaction  => 'txn_14sJxWLV2Qt9u2tw35SuFG9X',
+    failure_message      => undef,
+    failure_code         => undef,
+    amount_refunded      => 0,
+    customer             => undef,
+    invoice              => undef,
+    dispute              => 0,
+    metadata             => {},
+    statement_descriptor => undef,
+    fraud_details        => {},
+    receipt_number       => undef,
+    shipping             => undef,
+    refunds              => {},
+  }
 };
 
 =head1 ATTRIBUTES
@@ -387,47 +389,48 @@ sub _mock_interface {
   $app->routes->post(
     '/mocked/stripe-payment/charges' => sub {
       my $c = shift;
-      if ($c->param('token') and $c->req->url->userinfo eq "$secret:") {
-        $c->render(json => $MOCKED_FAIL_RESPONSE, code => 400);
+      if ($c->req->url->to_abs->userinfo eq "$secret:") {
+        local $MOCKED_RESPONSE->{json}{amount}   //= $c->param('amount');
+        local $MOCKED_RESPONSE->{json}{captured} //= $c->param('capture') // 1 ? \1 : \0;
+        local $MOCKED_RESPONSE->{json}{currency} //= lc $c->param('currency');
+        local $MOCKED_RESPONSE->{json}{description} //= $c->param('description') || '';
+        local $MOCKED_RESPONSE->{json}{livemode} //= $secret =~ /test/ ? \0 : \1;
+        local $MOCKED_RESPONSE->{json}{receipt_email} //= $c->param('receipt_email');
+        $c->render(%$MOCKED_RESPONSE);
       }
       else {
-        local $MOCKED_SUCCESSFUL_RESPONSE->{amount}   //= $c->param('amount');
-        local $MOCKED_SUCCESSFUL_RESPONSE->{captured} //= $c->param('capture') // 1 ? \1 : \0;
-        local $MOCKED_SUCCESSFUL_RESPONSE->{currency} //= lc $c->param('currency');
-        local $MOCKED_SUCCESSFUL_RESPONSE->{description} //= $c->param('description') || '';
-        local $MOCKED_SUCCESSFUL_RESPONSE->{livemode} //= $secret =~ /test/ ? \0 : \1;
-        local $MOCKED_SUCCESSFUL_RESPONSE->{receipt_email} //= $c->param('receipt_email');
-        $c->render(json => $MOCKED_SUCCESSFUL_RESPONSE);
+        $c->render(json => {error => {message => 'Bad secret!', type => 'invalid_request_error'}}, status => 400);
       }
     }
   );
   $app->routes->post(
     '/mocked/stripe-payment/charges/:id/capture' => sub {
       my $c = shift;
-      if ($c->param('token') and $c->req->url->userinfo eq "$secret:") {
-        $c->render(json => $MOCKED_FAIL_RESPONSE, code => 400);
+      if ($c->req->url->to_abs->userinfo eq "$secret:") {
+        local $MOCKED_RESPONSE->{json}{amount} //= $c->param('amount');
+        local $MOCKED_RESPONSE->{json}{captured} = \1;
+        local $MOCKED_RESPONSE->{json}{livemode} //= $secret =~ /test/ ? \0 : \1;
+        local $MOCKED_RESPONSE->{json}{receipt_email} //= $c->param('receipt_email');
+        $c->render(%$MOCKED_RESPONSE);
       }
       else {
-        local $MOCKED_SUCCESSFUL_RESPONSE->{amount} //= $c->param('amount');
-        local $MOCKED_SUCCESSFUL_RESPONSE->{captured} = \1;
-        local $MOCKED_SUCCESSFUL_RESPONSE->{livemode} //= $secret =~ /test/ ? \0 : \1;
-        local $MOCKED_SUCCESSFUL_RESPONSE->{receipt_email} //= $c->param('receipt_email');
-        $c->render(json => $MOCKED_SUCCESSFUL_RESPONSE);
+        $c->render(json => {error => {message => 'Bad secret!', type => 'invalid_request_error'}}, status => 400);
       }
     }
   );
   $app->routes->get(
     '/mocked/stripe-payment/charges/:id' => sub {
       my $c = shift;
-      if ($c->param('token') and $c->req->url->userinfo eq "$secret:") {
-        $c->render(json => $MOCKED_FAIL_RESPONSE, code => 400);
+      if ($c->req->url->to_abs->userinfo ne "$secret:") {
+        $c->render(json => {error => {message => 'Bad secret!', type => 'invalid_request_error'}}, status => 400);
       }
       elsif (my $id = $c->param('id')) {
-        local $MOCKED_SUCCESSFUL_RESPONSE->{id} = $id;
-        $c->render(json => $MOCKED_SUCCESSFUL_RESPONSE);
+        local $MOCKED_RESPONSE->{id} = $id;
+        $c->render(%$MOCKED_RESPONSE);
       }
       else {
-        $c->render(json => $MOCKED_FAIL_RESPONSE, code => 400) unless $c->param('id');
+        $c->render(json => {error => {message => 'Bad secret!', type => 'invalid_request_error'}}, status => 400)
+          unless $c->param('id');
       }
     }
   );
@@ -447,9 +450,18 @@ sub _retrieve_charge {
 
 sub _tx_to_res {
   my ($self, $tx) = @_;
-  my $error = $tx->error || {};
+  my $error = $tx->error     || {};
+  my $json  = $tx->res->json || {};
+  my $err   = '';
 
-  return $error->{message} || $error->{code} || '', $tx->res->json;
+  if ($error->{code} or $json->{error}) {
+    my $message = $json->{error}{message} || $json->{error}{type} || $error->{message};
+    my $type    = $json->{error}{param}   || $json->{error}{code} || $error->{code};
+
+    $err = sprintf '%s: %s', $type || 'Unknown', $message || 'Could not find any error message.';
+  }
+
+  return $err, $json;
 }
 
 =head1 SEE ALSO
