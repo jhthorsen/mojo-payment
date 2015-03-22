@@ -1,5 +1,9 @@
 Changelog for Mojolicious::Plugin::StripePayment
 
+0.02     Sun Mar 22 10:32:23 2015
+       * Fix capture need to be "true" or "false"
+       * Improved $err message in callback
+
 0.01     Sat Mar 21 15:31:45 2015
        * Can create charge
        * Can capture charge

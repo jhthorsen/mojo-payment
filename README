@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::StripePayment - Make payments using stripe.com
 
 VERSION
-    0.01
+    0.02
 
 DESCRIPTION
     Mojolicious::Plugin::StripePayment is a plugin for the Mojolicious web
