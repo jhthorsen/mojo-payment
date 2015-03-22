@@ -348,7 +348,7 @@ sub _create_charge {
   $form{receipt_email} ||= $c->param('stripeEmail') if $c->param('stripeEmail');
   $form{shipping} = $self->_expand(shipping => $args) if ref $form{shipping};
   $form{source} ||= $args->{token} || $c->param('stripeToken');
-  $form{capture} //= $self->auto_capture;
+  $form{capture} = ($form{capture} // $self->auto_capture) ? 'true' : 'false';
 
   if (defined $form{statement_descriptor} and 22 < length $form{statement_descriptor}) {
     return $c->$cb('statement_descriptor is too long', {});
@@ -443,7 +443,7 @@ sub _retrieve_charge {
   push @{$url->path->parts}, 'charges', $args->{id} || 'invalid';
   warn "[StripePayment] Retrieve charge $url\n" if DEBUG;
 
-  Mojo::IOLoop->delay(sub { $self->_ua->get($url, shift->begin); }, sub { $c->$cb($self->_tx_to_res($_[1])); },);
+  Mojo::IOLoop->delay(sub { $self->_ua->get($url, shift->begin); }, sub { $c->$cb($self->_tx_to_res($_[1])); });
 
   return $c;
 }
