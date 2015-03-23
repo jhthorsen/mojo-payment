@@ -138,7 +138,6 @@ our $MOCKED_RESPONSE = {
     customer             => undef,
     invoice              => undef,
     dispute              => 0,
-    metadata             => {},
     statement_descriptor => undef,
     fraud_details        => {},
     receipt_number       => undef,
@@ -344,11 +343,12 @@ sub _create_charge {
   $form{amount}   ||= $c->param('amount');
   $form{currency} ||= $self->currency_code;
   $form{description} = $c->param('description') || '' unless defined $form{description};
-  $form{metadata} = $self->_expand(metadata => $args) if ref $form{metadata};
   $form{receipt_email} ||= $c->param('stripeEmail') if $c->param('stripeEmail');
-  $form{shipping} = $self->_expand(shipping => $args) if ref $form{shipping};
   $form{source} ||= $args->{token} || $c->param('stripeToken');
   $form{capture} = ($form{capture} // $self->auto_capture) ? 'true' : 'false';
+
+  $self->_expand(\%form, metadata => $args) if ref $args->{metadata};
+  $self->_expand(\%form, shipping => $args) if ref $args->{shipping};
 
   if (defined $form{statement_descriptor} and 22 < length $form{statement_descriptor}) {
     return $c->$cb('statement_descriptor is too long', {});
@@ -370,11 +370,10 @@ sub _create_charge {
 }
 
 sub _expand {
-  my ($self, $ns, $args) = @_;
-  my $data = delete $args->{$ns} or return;
+  my ($self, $form, $ns, $args) = @_;
 
-  while (my ($k, $v) = each %$data) {
-    $args->{"$ns\[$k\]"} = $v;
+  while (my ($k, $v) = each %{$args->{$ns}}) {
+    $form->{"$ns\[$k\]"} = $v;
   }
 }
 
@@ -386,6 +385,16 @@ sub _mock_interface {
   $self->base_url('/mocked/stripe-payment');
   push @{$app->renderer->classes}, __PACKAGE__;
 
+  my $metadata = sub {
+    my $c = shift;
+    my %metadata;
+    for my $k (grep {/^metadata/} $c->req->body_params->names) {
+      my $n = $k =~ /^metadata\[\w+\]/ ? $1 : 'unknown';
+      $metadata{$n} = $c->param($k);
+    }
+    return \%metadata;
+  };
+
   $app->routes->post(
     '/mocked/stripe-payment/charges' => sub {
       my $c = shift;
@@ -395,6 +404,7 @@ sub _mock_interface {
         local $MOCKED_RESPONSE->{json}{currency} //= lc $c->param('currency');
         local $MOCKED_RESPONSE->{json}{description} //= $c->param('description') || '';
         local $MOCKED_RESPONSE->{json}{livemode} //= $secret =~ /test/ ? \0 : \1;
+        local $MOCKED_RESPONSE->{json}{metadata} //= $metadata->($c);
         local $MOCKED_RESPONSE->{json}{receipt_email} //= $c->param('receipt_email');
         $c->render(%$MOCKED_RESPONSE);
       }

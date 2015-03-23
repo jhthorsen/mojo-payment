@@ -1,5 +1,8 @@
 Changelog for Mojolicious::Plugin::StripePayment
 
+0.03
+       * Fix metadata and shipping when creating a charge
+
 0.02     Sun Mar 22 10:32:23 2015
        * Fix capture need to be "true" or "false"
        * Improved $err message in callback
