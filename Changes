@@ -1,6 +1,6 @@
 Changelog for Mojolicious::Plugin::StripePayment
 
-0.03
+0.03     Mon Mar 23 20:46:09 2015
        * Fix metadata and shipping when creating a charge
 
 0.02     Sun Mar 22 10:32:23 2015

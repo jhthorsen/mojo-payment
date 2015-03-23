@@ -6,7 +6,7 @@ Mojolicious::Plugin::StripePayment - Make payments using stripe.com
 
 =head1 VERSION
 
-0.02
+0.03
 
 =head1 DESCRIPTION
 
@@ -114,7 +114,7 @@ use Mojo::Base 'Mojolicious::Plugin';
 use Mojo::UserAgent;
 use constant DEBUG => $ENV{MOJO_STRIPE_DEBUG} || 0;
 
-our $VERSION = '0.02';
+our $VERSION = '0.03';
 
 my @CAPTURE_KEYS = qw( amount application_fee receipt_email statement_descriptor );
 my @CHARGE_KEYS
