@@ -403,7 +403,7 @@ sub register {
     paypal => sub {
       my $c = shift;
       return $self unless @_;
-      my $method = shift .'_payment';
+      my $method = sprintf '%s_payment', shift;
       $self->$method($c, @_);
       return $c;
     }
