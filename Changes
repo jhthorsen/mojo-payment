@@ -1,6 +1,6 @@
 Revision history for perl distribution Mojolicious-Plugin-PayPal
 
-0.06 Not Released
+0.06 2015-11-06T20:10:53+0100
  - Fix 'Use of "shift" without parentheses is ambiguous' warning #1
 
 0.05 2015-01-02T13:22:38Z

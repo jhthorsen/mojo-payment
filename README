@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 VERSION
-    0.05
+    0.06
 
 DESCRIPTION
     Mojolicious::Plugin::PayPal is a plugin for the Mojolicious web
