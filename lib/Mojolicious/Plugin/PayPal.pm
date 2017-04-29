@@ -1,4 +1,336 @@
 package Mojolicious::Plugin::PayPal;
+use Mojo::Base 'Mojolicious::Plugin';
+use Mojo::JSON 'j';
+use Mojo::UserAgent;
+use constant DEBUG => $ENV{MOJO_PAYPAL_DEBUG} || 0;
+
+
+our $VERSION = '0.06';
+
+has base_url              => 'https://api.sandbox.paypal.com';
+has client_id             => 'dummy_client';
+has currency_code         => 'USD';
+has transaction_id_mapper => undef;
+has secret                => 'dummy_secret';
+has _ua                   => sub { Mojo::UserAgent->new; };
+
+sub process_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my %body;
+
+  $args->{cancel} //= $c->param('return_url') ? 0 : 1;
+  $args->{token} ||= $c->param('token')
+    or return $self->$cb($self->_error('token missing in input'));
+  $args->{payer_id} ||= $c->param('PayerID')
+    or return $self->$cb($self->_error('PayerID missing in input'));
+
+  %body = (payer_id => $args->{payer_id});
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->transaction_id_mapper->($self, $args->{token}, undef, $delay->begin);
+    },
+    sub {
+      my ($delay, $err, $transaction_id) = @_;
+      return $self->$cb($self->_error($err)) if $err;
+      my $url = $self->_url("/v1/payments/payment/$transaction_id/execute");
+      $delay->pass($transaction_id);
+      $self->_make_request_with_token(post => $url, j(\%body), $delay->begin);
+    },
+    sub {
+      my ($delay, $transaction_id, $tx) = @_;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
+
+      $res->code(0) unless $res->code;
+      $res->param(transaction_id => $transaction_id);
+
+      if ($args->{cancel}) {
+        $res->param(message => 'Payment cancelled.');
+        $res->param(source  => $self->base_url);
+        $res->code(205);
+        return $self->$cb($res);
+      }
+
+      local $@;
+      eval {
+        my $json = $res->json;
+        my $token;
+
+        $json->{id} or die 'No transaction ID in response from PayPal';
+        $json->{state} eq 'approved' or die $json->{state};
+
+        while (my ($key, $value) = each %{$json->{payer}{payer_info} || {}}) {
+          $res->param("payer_$key" => $value);
+        }
+
+        $res->param(payer_id       => $args->{payer_id});
+        $res->param(state          => $json->{state});
+        $res->param(transaction_id => $json->{id});
+        $res->code(200);
+        $self->$cb($res);
+        1;
+      } or do {
+        warn "[MOJO_PAYPAL] ! $@" if DEBUG;
+        $self->$cb($self->_extract_error($res, $@));
+      };
+    },
+  );
+
+  $self;
+}
+
+sub register_payment {
+  my ($self, $c, $args, $cb) = @_;
+  my $register_url = $self->_url('/v1/payments/payment');
+  my $redirect_url = Mojo::URL->new($args->{redirect_url} = $c->req->url->to_abs);
+  my %body;
+
+  $args->{amount} or return $self->$cb($self->_error('amount missing in input'));
+
+  %body = (
+    intent        => 'sale',
+    redirect_urls => {
+      return_url => $redirect_url->query(return_url => 1)->to_abs,
+      cancel_url => $redirect_url->to_abs,
+    },
+    payer        => {payment_method => 'paypal',},
+    transactions => [
+      {
+        description => $args->{description} || '',
+        amount =>
+          {total => $args->{amount}, currency => $args->{currency_code} || $self->currency_code,},
+      },
+    ],
+  );
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
+
+      $res->code(0) unless $res->code;
+
+      local $@;
+      eval {
+        my $json = $res->json;
+        my $token;
+
+        $json->{id} or die 'No transaction ID in response from PayPal';
+        $json->{state} eq 'created' or die $json->{state};
+
+        for my $link (@{$json->{links}}) {
+          my $key = "$link->{rel}_url";
+          $key =~ s!_url_url$!_url!;
+          $res->param($key => $link->{href});
+        }
+
+        $token = Mojo::URL->new($res->param('approval_url'))->query->param('token');
+
+        $res->param(state          => $json->{state});
+        $res->param(transaction_id => $json->{id});
+        $res->headers->location($res->param('approval_url'));
+        $res->code(302);
+        $delay->pass($res);
+        $self->transaction_id_mapper->($self, $token => $json->{id}, $delay->begin);
+        1;
+      } or do {
+        warn "[MOJO_PAYPAL] ! $@" if DEBUG;
+        $delay->pass($self->_extract_error($res, $@));
+      };
+    },
+    sub {
+      my ($delay, $res, $err, $id) = @_;
+
+      return $self->$cb($self->_error($err)) if $err;
+      return $self->$cb($res);
+    },
+  );
+
+  $self;
+}
+
+sub register {
+  my ($self, $app, $config) = @_;
+
+  # self contained
+  if (ref $config->{secret}) {
+    $self->_add_routes($app);
+    $self->_ua->server->app($app);
+    $config->{secret} = ${$config->{secret}};
+  }
+  elsif ($app->mode eq 'production') {
+    $config->{base_url} ||= 'https://api.paypal.com';
+  }
+
+  # copy config to this object
+  for (grep { $self->$_ } keys %$config) {
+    $self->{$_} = $config->{$_};
+  }
+
+  unless ($self->transaction_id_mapper) {
+    $self->transaction_id_mapper(
+      sub {
+        my ($self, $token, $transaction_id, $cb) = @_;
+        $app->log->warn("You need to set 'transaction_id_mapper' in Mojolicious::Plugin::PayPal");
+        $self->$cb('', $self->{transaction_id_map}{$token} //= $transaction_id);
+      }
+    );
+  }
+
+  $app->helper(
+    paypal => sub {
+      my $c = shift;
+      return $self unless @_;
+      my $method = sprintf '%s_payment', shift;
+      $self->$method($c, @_);
+      return $c;
+    }
+  );
+}
+
+sub _add_routes {
+  my ($self, $app) = @_;
+  my $r        = $app->routes;
+  my $payments = $self->{payments}
+    ||= {};    # just here for debug purposes, may change without warning
+
+  $self->base_url('/paypal');
+
+  $r->post('/paypal/v1/oauth2/token' => {template => 'paypal/v1/oauth2/token', format => 'json'});
+
+  $r->post(
+    '/paypal/v1/payments/payment' => sub {
+      my $self  = shift;
+      my $token = 'EC-60U79048BN7719609';
+      $payments->{$token} = $self->req->json;
+      $self->render('paypal/v1/payments/payment', token => $token, format => 'json');
+    }
+  );
+
+  $r->get('/paypal/webscr')->to(
+    cb => sub {
+      my $self = shift;
+      my $token = $self->param('token') || 'missing';
+      $payments->{CR87QHB7JTRSC} = $payments->{$token};    # payer_id = CR87QHB7JTRSC
+      $self->render('paypal/webscr', format => 'html', payment => $payments->{$token});
+    }
+  );
+
+  $r->post('/paypal/v1/payments/payment/:transaction_id/execute')->to(
+    cb => sub {
+      my $self = shift;
+      my $payer_id = $self->req->json->{payer_id} || 'missing';
+      $self->render(
+        'paypal/v1/payments/payment/execute',
+        payment => $payments->{$payer_id},
+        format  => 'json'
+      );
+    }
+  );
+
+  push @{$app->renderer->classes}, __PACKAGE__;
+}
+
+sub _error {
+  my ($self, $err) = @_;
+  my $res = Mojolicious::Plugin::NetsPayment::Res->new;
+  $res->code(400);
+  $res->param(message => $err);
+  $res->param(source  => __PACKAGE__);
+  $res;
+}
+
+sub _extract_error {
+  my ($self, $res, $e) = @_;
+  my $err = '';    # TODO
+
+  $res->code(500);
+  $res->param(message => $err // $e);
+  $res->param(source => $err ? $self->base_url : __PACKAGE__);
+  $res;
+}
+
+sub _get_access_token {
+  my ($self, $cb) = @_;
+  my $token_url = $self->_url('/v1/oauth2/token');
+  my %headers = ('Accept' => 'application/json', 'Accept-Language' => 'en_US');
+
+  $token_url->userinfo(join ':', $self->client_id, $self->secret);
+  warn "[MOJO_PAYPAL] Token URL $token_url\n" if DEBUG == 2;
+
+  Mojo::IOLoop->delay(
+    sub {
+      my ($delay) = @_;
+      $self->_ua->post(
+        $token_url, \%headers,
+        form => {grant_type => 'client_credentials'},
+        $delay->begin
+      );
+    },
+    sub {
+      my ($delay, $tx) = @_;
+      my $json = eval { $tx->res->json } || {};
+
+      $json->{access_token} //= '';
+      $self->$cb($self->{access_token} = $json->{access_token}, $tx);
+    },
+  );
+}
+
+# https://developer.paypal.com/webapps/developer/docs/integration/direct/make-your-first-call/
+sub _make_request_with_token {
+  my ($self, $method, $url, $body, $cb) = @_;
+  my %headers = ('Content-Type' => 'application/json');
+
+  Mojo::IOLoop->delay(
+    sub {    # get token unless we have it
+      my ($delay) = @_;
+      return $delay->pass($self->{access_token}, undef) if $self->{access_token};
+      return $self->_get_access_token($delay->begin);
+    },
+    sub {    # abort or make request with token
+      my ($delay, $token, $tx) = @_;
+      return $self->$cb($tx) unless $token;
+      $headers{Authorization} = "Bearer $token";
+      warn "[MOJO_PAYPAL] Authorization: Bearer $token\n" if DEBUG;
+      return $self->_ua->$method($url, \%headers, $body, $delay->begin);
+    },
+    sub {    # get token if it has expired
+      my ($delay, $tx) = @_;
+      return $self->_get_access_token($delay->begin) if $tx->res->code == 401;
+      return $delay->pass(undef, $tx);    # success
+    },
+    sub {                                 # return or retry request with new token
+      my ($delay, $token, $tx) = @_;
+      return $self->$cb($tx) unless $token;    # return success or error $tx
+      $headers{Authorization} = "Bearer $token";
+      warn "[MOJO_PAYPAL] Authorization: Bearer $token\n" if DEBUG;
+      return $self->_ua->$method($url, \%headers, $body, $cb);
+    },
+  );
+}
+
+sub _url {
+  my $url = Mojo::URL->new($_[0]->base_url . $_[1]);
+  warn "[MOJO_PAYPAL] URL $url\n" if DEBUG;
+  $url;
+}
+
+package Mojolicious::Plugin::NetsPayment::Res;
+use Mojo::Base 'Mojo::Message::Response';
+sub param { shift->body_params->param(@_) }
+
+
+package Mojolicious::Plugin::PayPal;
+
+1;
+
+=encoding utf8
 
 =head1 NAME
 
@@ -84,15 +416,6 @@ You should provide a L</transaction_id_mapper>. Here is an example code on how t
     }
   });
 
-=cut
-
-use Mojo::Base 'Mojolicious::Plugin';
-use Mojo::JSON 'j';
-use Mojo::UserAgent;
-use constant DEBUG => $ENV{MOJO_PAYPAL_DEBUG} || 0;
-
-our $VERSION = '0.06';
-
 =head1 ATTRIBUTES
 
 =head2 base_url
@@ -135,15 +458,6 @@ solution. See L</Transaction ID mapper> for example code.
 The value used as password when fetching the the access token.
 This can be found in "Applications tab" in the PayPal Developer site.
 
-=cut
-
-has base_url => 'https://api.sandbox.paypal.com';
-has client_id => 'dummy_client';
-has currency_code => 'USD';
-has transaction_id_mapper => undef;
-has secret => 'dummy_secret';
-has _ua => sub { Mojo::UserAgent->new; };
-
 =head1 HELPERS
 
 =head2 paypal
@@ -180,72 +494,6 @@ from the PayPal terminal.
 
 See L<https://developer.paypal.com/webapps/developer/docs/api/#execute-an-approved-paypal-payment>
 for details.
-
-=cut
-
-sub process_payment {
-  my ($self, $c, $args, $cb) = @_;
-  my %body;
-
-  $args->{cancel} //= $c->param('return_url') ? 0 : 1;
-  $args->{token} ||= $c->param('token') or return $self->$cb($self->_error('token missing in input'));
-  $args->{payer_id} ||= $c->param('PayerID') or return $self->$cb($self->_error('PayerID missing in input'));
-
-  %body = ( payer_id => $args->{payer_id} );
-
-  Mojo::IOLoop->delay(
-    sub {
-      my ($delay) = @_;
-      $self->transaction_id_mapper->($self, $args->{token}, undef, $delay->begin);
-    },
-    sub {
-      my ($delay, $err, $transaction_id) = @_;
-      return $self->$cb($self->_error($err)) if $err;
-      my $url = $self->_url("/v1/payments/payment/$transaction_id/execute");
-      $delay->pass($transaction_id);
-      $self->_make_request_with_token(post => $url, j(\%body), $delay->begin);
-    },
-    sub {
-      my ($delay, $transaction_id, $tx) = @_;
-      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
-
-      $res->code(0) unless $res->code;
-      $res->param(transaction_id => $transaction_id);
-
-      if ($args->{cancel}) {
-        $res->param(message => 'Payment cancelled.');
-        $res->param(source => $self->base_url);
-        $res->code(205);
-        return $self->$cb($res);
-      }
-
-      local $@;
-      eval {
-        my $json = $res->json;
-        my $token;
-
-        $json->{id} or die 'No transaction ID in response from PayPal';
-        $json->{state} eq 'approved' or die $json->{state};
-
-        while(my($key, $value) = each %{ $json->{payer}{payer_info} || {} }) {
-          $res->param("payer_$key" => $value);
-        }
-
-        $res->param(payer_id => $args->{payer_id});
-        $res->param(state => $json->{state});
-        $res->param(transaction_id => $json->{id});
-        $res->code(200);
-        $self->$cb($res);
-        1;
-      } or do {
-        warn "[MOJO_PAYPAL] ! $@" if DEBUG;
-        $self->$cb($self->_extract_error($res, $@));
-      };
-    },
-  );
-
-  $self;
-}
 
 =head2 register_payment
 
@@ -285,248 +533,11 @@ customer related details.
 
 =back
 
-=cut
-
-sub register_payment {
-  my ($self, $c, $args, $cb) = @_;
-  my $register_url = $self->_url('/v1/payments/payment');
-  my $redirect_url = Mojo::URL->new($args->{redirect_url} = $c->req->url->to_abs);
-  my %body;
-
-  $args->{amount} or return $self->$cb($self->_error('amount missing in input'));
-
-  %body = (
-    intent => 'sale',
-    redirect_urls => {
-      return_url => $redirect_url->query(return_url => 1)->to_abs,
-      cancel_url => $redirect_url->to_abs,
-    },
-    payer => {
-      payment_method => 'paypal',
-    },
-    transactions => [
-      {
-        description => $args->{description} || '',
-        amount => {
-          total => $args->{amount},
-          currency => $args->{currency_code} || $self->currency_code,
-        },
-      },
-    ],
-  );
-
-  Mojo::IOLoop->delay(
-    sub {
-      my ($delay) = @_;
-      $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
-    },
-    sub {
-      my ($delay, $tx) = @_;
-      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
-
-      $res->code(0) unless $res->code;
-
-      local $@;
-      eval {
-        my $json = $res->json;
-        my $token;
-
-        $json->{id} or die 'No transaction ID in response from PayPal';
-        $json->{state} eq 'created' or die $json->{state};
-
-        for my $link (@{ $json->{links} }) {
-          my $key = "$link->{rel}_url";
-          $key =~ s!_url_url$!_url!;
-          $res->param($key => $link->{href});
-        }
-
-        $token = Mojo::URL->new($res->param('approval_url'))->query->param('token');
-
-        $res->param(state => $json->{state});
-        $res->param(transaction_id => $json->{id});
-        $res->headers->location($res->param('approval_url'));
-        $res->code(302);
-        $delay->pass($res);
-        $self->transaction_id_mapper->($self, $token => $json->{id}, $delay->begin);
-        1;
-      } or do {
-        warn "[MOJO_PAYPAL] ! $@" if DEBUG;
-        $delay->pass($self->_extract_error($res, $@));
-      };
-    },
-    sub {
-      my ($delay, $res, $err, $id) = @_;
-
-      return $self->$cb($self->_error($err)) if $err;
-      return $self->$cb($res);
-    },
-  );
-
-  $self;
-}
-
 =head2 register
 
   $app->plugin(PayPal => \%config);
 
 Called when registering this plugin in the main L<Mojolicious> application.
-
-=cut
-
-sub register {
-  my ($self, $app, $config) = @_;
-
-  # self contained
-  if (ref $config->{secret}) {
-    $self->_add_routes($app);
-    $self->_ua->server->app($app);
-    $config->{secret} = ${ $config->{secret} };
-  }
-  elsif ($app->mode eq 'production') {
-    $config->{base_url} ||= 'https://api.paypal.com';
-  }
-
-  # copy config to this object
-  for (grep { $self->$_ } keys %$config) {
-    $self->{$_} = $config->{$_};
-  }
-
-  unless ($self->transaction_id_mapper) {
-    $self->transaction_id_mapper(sub {
-      my ($self, $token, $transaction_id, $cb) = @_;
-      $app->log->warn("You need to set 'transaction_id_mapper' in Mojolicious::Plugin::PayPal");
-      $self->$cb('', $self->{transaction_id_map}{$token} //= $transaction_id);
-    });
-  }
-
-  $app->helper(
-    paypal => sub {
-      my $c = shift;
-      return $self unless @_;
-      my $method = sprintf '%s_payment', shift;
-      $self->$method($c, @_);
-      return $c;
-    }
-  );
-}
-
-sub _add_routes {
-  my ($self, $app) = @_;
-  my $r = $app->routes;
-  my $payments = $self->{payments} ||= {}; # just here for debug purposes, may change without warning
-
-  $self->base_url('/paypal');
-
-  $r->post('/paypal/v1/oauth2/token' => { template => 'paypal/v1/oauth2/token', format => 'json' });
-
-  $r->post('/paypal/v1/payments/payment' => sub {
-    my $self = shift;
-    my $token = 'EC-60U79048BN7719609';
-    $payments->{$token} = $self->req->json;
-    $self->render('paypal/v1/payments/payment', token => $token, format => 'json');
-  });
-
-  $r->get('/paypal/webscr')->to(cb => sub {
-    my $self = shift;
-    my $token = $self->param('token') || 'missing';
-    $payments->{CR87QHB7JTRSC} = $payments->{$token}; # payer_id = CR87QHB7JTRSC
-    $self->render('paypal/webscr', format => 'html', payment => $payments->{$token});
-  });
-
-  $r->post('/paypal/v1/payments/payment/:transaction_id/execute')->to(cb => sub {
-    my $self = shift;
-    my $payer_id = $self->req->json->{payer_id} || 'missing';
-    $self->render('paypal/v1/payments/payment/execute', payment => $payments->{$payer_id}, format => 'json');
-  });
-
-  push @{ $app->renderer->classes }, __PACKAGE__;
-}
-
-sub _error {
-  my ($self, $err) = @_;
-  my $res = Mojolicious::Plugin::NetsPayment::Res->new;
-  $res->code(400);
-  $res->param(message => $err);
-  $res->param(source => __PACKAGE__);
-  $res;
-}
-
-sub _extract_error {
-  my ($self, $res, $e) = @_;
-  my $err = ''; # TODO
-
-  $res->code(500);
-  $res->param(message => $err // $e);
-  $res->param(source => $err ? $self->base_url : __PACKAGE__);
-  $res;
-}
-
-sub _get_access_token {
-  my ($self, $cb) = @_;
-  my $token_url = $self->_url('/v1/oauth2/token');
-  my %headers = ( 'Accept' => 'application/json', 'Accept-Language' => 'en_US' );
-
-  $token_url->userinfo(join ':', $self->client_id, $self->secret);
-  warn "[MOJO_PAYPAL] Token URL $token_url\n" if DEBUG == 2;
-
-  Mojo::IOLoop->delay(
-    sub {
-      my ($delay) = @_;
-      $self->_ua->post($token_url, \%headers, form => { grant_type => 'client_credentials' }, $delay->begin);
-    },
-    sub {
-      my ($delay, $tx) = @_;
-      my $json = eval { $tx->res->json } || {};
-
-      $json->{access_token} //= '';
-      $self->$cb($self->{access_token} = $json->{access_token}, $tx);
-    },
-  );
-}
-
-# https://developer.paypal.com/webapps/developer/docs/integration/direct/make-your-first-call/
-sub _make_request_with_token {
-  my ($self, $method, $url, $body, $cb) = @_;
-  my %headers = ( 'Content-Type' => 'application/json' );
-
-  Mojo::IOLoop->delay(
-    sub { # get token unless we have it
-      my ($delay) = @_;
-      return $delay->pass($self->{access_token}, undef) if $self->{access_token};
-      return $self->_get_access_token($delay->begin);
-    },
-    sub { # abort or make request with token
-      my ($delay, $token, $tx) = @_;
-      return $self->$cb($tx) unless $token;
-      $headers{Authorization} = "Bearer $token";
-      warn "[MOJO_PAYPAL] Authorization: Bearer $token\n" if DEBUG;
-      return $self->_ua->$method($url, \%headers, $body, $delay->begin);
-    },
-    sub { # get token if it has expired
-      my ($delay, $tx) = @_;
-      return $self->_get_access_token($delay->begin) if $tx->res->code == 401;
-      return $delay->pass(undef, $tx); # success
-    },
-    sub { # return or retry request with new token
-      my ($delay, $token, $tx) = @_;
-      return $self->$cb($tx) unless $token; # return success or error $tx
-      $headers{Authorization} = "Bearer $token";
-      warn "[MOJO_PAYPAL] Authorization: Bearer $token\n" if DEBUG;
-      return $self->_ua->$method($url, \%headers, $body, $cb);
-    },
-  );
-}
-
-sub _url {
-  my $url = Mojo::URL->new($_[0]->base_url .$_[1]);
-  warn "[MOJO_PAYPAL] URL $url\n" if DEBUG;
-  $url;
-}
-
-package
-  Mojolicious::Plugin::NetsPayment::Res;
-use Mojo::Base 'Mojo::Message::Response';
-sub param { shift->body_params->param(@_) }
 
 =head1 COPYRIGHT AND LICENSE
 
@@ -545,9 +556,6 @@ Yu Pan - C<yu.pan1005@gmail.com>
 
 =cut
 
-1;
-
-package Mojolicious::Plugin::PayPal;
 __DATA__
 @@ layouts/paypal.html.ep
 <!DOCTYPE html>
