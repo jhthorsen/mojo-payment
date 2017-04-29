@@ -83,7 +83,7 @@ sub process_payment {
 sub register_payment {
   my ($self, $c, $args, $cb) = @_;
   my $register_url = $self->_url('/v1/payments/payment');
-  my $redirect_url = Mojo::URL->new($args->{redirect_url} = $c->req->url->to_abs);
+  my $redirect_url = Mojo::URL->new($args->{redirect_url} ||= $c->req->url->to_abs);
   my %body;
 
   $args->{amount} or return $self->$cb($self->_error('amount missing in input'));
