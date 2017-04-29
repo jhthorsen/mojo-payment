@@ -40,7 +40,7 @@ sub process_payment {
     },
     sub {
       my ($delay, $transaction_id, $tx) = @_;
-      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
+      my $res = Mojolicious::Plugin::PayPal::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
       $res->param(transaction_id => $transaction_id);
@@ -111,7 +111,7 @@ sub register_payment {
     },
     sub {
       my ($delay, $tx) = @_;
-      my $res = Mojolicious::Plugin::NetsPayment::Res->new($tx->res);
+      my $res = Mojolicious::Plugin::PayPal::Res->new($tx->res);
 
       $res->code(0) unless $res->code;
 
@@ -238,7 +238,7 @@ sub _add_routes {
 
 sub _error {
   my ($self, $err) = @_;
-  my $res = Mojolicious::Plugin::NetsPayment::Res->new;
+  my $res = Mojolicious::Plugin::PayPal::Res->new;
   $res->code(400);
   $res->param(message => $err);
   $res->param(source  => __PACKAGE__);
@@ -321,10 +321,12 @@ sub _url {
   $url;
 }
 
-package Mojolicious::Plugin::NetsPayment::Res;
-use Mojo::Base 'Mojo::Message::Response';
-sub param { shift->body_params->param(@_) }
+{
 
+  package Mojolicious::Plugin::PayPal::Res;
+  use Mojo::Base 'Mojo::Message::Response';
+  sub param { shift->body_params->param(@_) }
+}
 
 package Mojolicious::Plugin::PayPal;
 
