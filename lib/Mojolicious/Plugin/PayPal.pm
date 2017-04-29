@@ -5,7 +5,7 @@ use Mojo::UserAgent;
 use constant DEBUG => $ENV{MOJO_PAYPAL_DEBUG} || 0;
 
 
-our $VERSION = '0.06';
+our $VERSION = '0.07';
 
 has base_url              => 'https://api.sandbox.paypal.com';
 has client_id             => 'dummy_client';
@@ -340,7 +340,7 @@ Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 =head1 VERSION
 
-0.06
+0.07
 
 =head1 DESCRIPTION
 

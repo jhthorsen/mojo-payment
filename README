@@ -2,7 +2,7 @@ NAME
     Mojolicious::Plugin::PayPal - Make payments using PayPal
 
 VERSION
-    0.06
+    0.07
 
 DESCRIPTION
     Mojolicious::Plugin::PayPal is a plugin for the Mojolicious web
@@ -26,39 +26,39 @@ SYNOPSIS
 
       # register a payment and send the visitor to PayPal payment terminal
       post '/checkout' => sub {
-        my $self = shift->render_later;
+        my $c = shift;
         my %payment = (
-          amount => $self->param('amount'),
+          amount => $c->param('amount'),
           description => 'Some description',
         );
 
-        Mojo::IOLoop->delay(
+        $c->delay(
           sub {
             my ($delay) = @_;
-            $self->paypal(register => \%payment, $delay->begin);
+            $c->paypal(register => \%payment, $delay->begin);
           },
           sub {
             my ($delay, $res) = @_;
-            return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+            return $c->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
             # store $res->param('transaction_id');
-            $self->redirect_to($res->headers->location);
+            $c->redirect_to($res->headers->location);
           },
         );
       };
 
       # after redirected back from PayPal payment terminal
       get '/checkout' => sub {
-        my $self = shift->render_later;
+        my $c = shift;
 
-        Mojo::IOLoop->delay(
+        $c->delay(
           sub {
             my ($delay) = @_;
-            $self->paypal(process => {}, $delay->begin);
+            $c->paypal(process => {}, $delay->begin);
           },
           sub {
             my ($delay, $res) = @_;
-            return $self->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
-            return $self->render(text => "yay!");
+            return $c->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
+            return $c->render(text => "yay!");
           },
         );
       };
