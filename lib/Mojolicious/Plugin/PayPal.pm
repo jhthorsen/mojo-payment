@@ -26,7 +26,7 @@ sub process_payment {
 
   %body = (payer_id => $args->{payer_id});
 
-  Mojo::IOLoop->delay(
+  $c->delay(
     sub {
       my ($delay) = @_;
       $self->transaction_id_mapper->($self, $args->{token}, undef, $delay->begin);
@@ -36,7 +36,7 @@ sub process_payment {
       return $self->$cb($self->_error($err)) if $err;
       my $url = $self->_url("/v1/payments/payment/$transaction_id/execute");
       $delay->pass($transaction_id);
-      $self->_make_request_with_token(post => $url, j(\%body), $delay->begin);
+      $self->_make_request_with_token($c, post => $url, j(\%body), $delay->begin);
     },
     sub {
       my ($delay, $transaction_id, $tx) = @_;
@@ -104,10 +104,10 @@ sub register_payment {
     ],
   );
 
-  Mojo::IOLoop->delay(
+  $c->delay(
     sub {
       my ($delay) = @_;
-      $self->_make_request_with_token(post => $register_url, j(\%body), $delay->begin);
+      $self->_make_request_with_token($c, post => $register_url, j(\%body), $delay->begin);
     },
     sub {
       my ($delay, $tx) = @_;
@@ -263,7 +263,7 @@ sub _get_access_token {
   $token_url->userinfo(join ':', $self->client_id, $self->secret);
   warn "[MOJO_PAYPAL] Token URL $token_url\n" if DEBUG == 2;
 
-  Mojo::IOLoop->delay(
+  $c->delay(
     sub {
       my ($delay) = @_;
       $self->_ua->post(
@@ -284,10 +284,10 @@ sub _get_access_token {
 
 # https://developer.paypal.com/webapps/developer/docs/integration/direct/make-your-first-call/
 sub _make_request_with_token {
-  my ($self, $method, $url, $body, $cb) = @_;
+  my ($self, $c, $method, $url, $body, $cb) = @_;
   my %headers = ('Content-Type' => 'application/json');
 
-  Mojo::IOLoop->delay(
+  $c->delay(
     sub {    # get token unless we have it
       my ($delay) = @_;
       return $delay->pass($self->{access_token}, undef) if $self->{access_token};
@@ -363,39 +363,39 @@ See also L<https://developer.paypal.com/webapps/developer/docs/integration/web/a
 
   # register a payment and send the visitor to PayPal payment terminal
   post '/checkout' => sub {
-    my $self = shift->render_later;
+    my $c = shift;
     my %payment = (
-      amount => $self->param('amount'),
+      amount => $c->param('amount'),
       description => 'Some description',
     );
 
-    Mojo::IOLoop->delay(
+    $c->delay(
       sub {
         my ($delay) = @_;
-        $self->paypal(register => \%payment, $delay->begin);
+        $c->paypal(register => \%payment, $delay->begin);
       },
       sub {
         my ($delay, $res) = @_;
-        return $self->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
+        return $c->render(text => "Ooops!", status => $res->code) unless $res->code == 302;
         # store $res->param('transaction_id');
-        $self->redirect_to($res->headers->location);
+        $c->redirect_to($res->headers->location);
       },
     );
   };
 
   # after redirected back from PayPal payment terminal
   get '/checkout' => sub {
-    my $self = shift->render_later;
+    my $c = shift;
 
-    Mojo::IOLoop->delay(
+    $c->delay(
       sub {
         my ($delay) = @_;
-        $self->paypal(process => {}, $delay->begin);
+        $c->paypal(process => {}, $delay->begin);
       },
       sub {
         my ($delay, $res) = @_;
-        return $self->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
-        return $self->render(text => "yay!");
+        return $c->render(text => $res->param("message"), status => $res->code) unless $res->code == 200;
+        return $c->render(text => "yay!");
       },
     );
   };
