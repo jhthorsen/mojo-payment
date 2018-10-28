@@ -4,8 +4,6 @@ use Mojo::JSON qw(false true);
 use Mojo::Payment::Stripe;
 use Test::More;
 
-plan skip_all => 'MOJO_STRIPE_SECRET_KEY=sk_test_xyz' unless $ENV{MOJO_STRIPE_SECRET_KEY};
-
 $ENV{MOJO_USERAGENT_CACHE_STRATEGY} ||= 'playback';
 use Mojo::UserAgent::Role::Cache;
 Mojo::UserAgent::Role::Cache->cache_driver_singleton->root_dir(path(
