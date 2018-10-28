@@ -1,3 +1,5 @@
-# You can install this project with curl -L http://cpanmin.us | perl - https://github.com/jhthorsen/mojolicious-plugin-payment/archive/master.tar.gz
-requires "perl" => "5.10.0";
+# You can install this project with curl -L http://cpanmin.us | perl - https://github.com/jhthorsen/mojo-payment/archive/master.tar.gz
+requires "Mojo::UserAgent::Role::Cache" => "0.02";
+requires "Mojolicious"                  => "8.00";
+
 test_requires "Test::More" => "0.88";
