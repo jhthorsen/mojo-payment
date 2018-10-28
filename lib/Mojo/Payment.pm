@@ -7,9 +7,13 @@ use Mojo::UserAgent;
 
 has default_currency => '';
 has ua               => sub {
-  $ENV{MOJO_USERAGENT_CACHE_STRATEGY}
+  my $ua
+    = $ENV{MOJO_USERAGENT_CACHE_STRATEGY}
     ? Mojo::UserAgent->with_roles('+Cache')->new
     : Mojo::UserAgent->new;
+
+  $ua->transactor->name('Mojo-Payment (Perl)');
+  $ua;
 };
 
 sub _reject { Mojo::Payment::Error->throw($_[1]) }
