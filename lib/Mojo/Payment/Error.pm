@@ -1,15 +1,31 @@
 package Mojo::Payment::Error;
 use Mojo::Base 'Mojo::Exception';
 
-has charge       => '';
 has code         => 500;
 has decline_code => '';
+has details      => sub { +[] };
 has doc_url      => '';
+has id           => '';
 has message      => '';
 has param        => '';
 has type         => 'unknown';
 
-sub new { shift->Mojo::Base::new(ref $_[1] eq 'HASH' ? shift : {message => shift}) }
+sub new {
+  my $self = shift->Mojo::Base::new(ref $_[0] eq 'HASH' ? shift : {message => shift});
+
+  $self->doc_url(delete $self->{information_link})  if $self->{information_link};     # Paypal
+  $self->id(delete $self->{charge})                 if $self->{charge};               # Stripe
+  $self->id(delete $self->{debug_id})               if $self->{debug_id};             # Paypal
+  $self->message(delete $self->{error_description}) if $self->{error_description};    # Paypal
+  $self->type(delete $self->{error})                if $self->{error};                # Paypal
+  $self->type(delete $self->{name})                 if $self->{name};                 # Paypal
+  $self;
+}
+
+sub to_string {
+  my $self = shift;
+  sprintf '[%s/%s] %s', $self->type, $self->id, $self->message;
+}
 
 1;
 
@@ -43,6 +59,8 @@ about a payment issue.
 =head1 METHODS
 
 =head2 new
+
+=head2 to_string
 
 =head1 SEE ALSO
 

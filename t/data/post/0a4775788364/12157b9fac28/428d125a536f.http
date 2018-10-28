@@ -1,0 +1,15 @@
+HTTP/1.1 400 Bad Request
+HTTP_X_PP_AZ_LOCATOR: sandbox.slc
+paypal-debug-id: eeb255ed9893
+paypal-debug-id: eeb255ed9893
+Connection: close
+Content-Type: application/json
+Content-Length: 190
+Content-Language: *
+Server: Apache
+Date: Sun, 28 Oct 2018 07:57:54 GMT
+Vary: Authorization
+Set-Cookie: X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D1880%26app%3Dapiplatformproxyserv%26TIME%3D40686939%26HTTP_X_PP_AZ_LOCATOR%3Dsandbox.slc; Expires=Sun, 28 Oct 2018 08:27:54 GMT; domain=.paypal.com; path=/; Secure; HttpOnly
+Set-Cookie: X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+
+{"name":"PAYMENT_NOT_APPROVED_FOR_EXECUTION","message":"Payer has not approved payment","information_link":"https://developer.paypal.com/docs/api/payments/#errors","debug_id":"eeb255ed9893"}

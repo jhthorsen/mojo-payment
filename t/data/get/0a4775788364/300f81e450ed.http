@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+paypal-debug-id: 5f412e53be1f1
+paypal-debug-id: 5f412e53be1f1
+Vary: Authorization
+Connection: close
+HTTP_X_PP_AZ_LOCATOR: sandbox.slc
+Date: Sun, 28 Oct 2018 08:00:16 GMT
+Content-Type: application/json
+Content-Language: *
+Server: Apache
+Set-Cookie: X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D1880%26app%3Dapiplatformproxyserv%26TIME%3D2423051611%26HTTP_X_PP_AZ_LOCATOR%3Dsandbox.slc; Expires=Sun, 28 Oct 2018 08:30:16 GMT; domain=.paypal.com; path=/; Secure; HttpOnly
+Set-Cookie: X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+Content-Length: 25
+
+{"payments":[],"count":0}

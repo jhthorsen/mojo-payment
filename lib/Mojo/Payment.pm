@@ -36,6 +36,8 @@ L<Mojo::Payment> is the base class for different payment providers:
 
 =over 2
 
+=item * L<Mojo::Payment::Paypal>
+
 =item * L<Mojo::Payment::Stripe>
 
 =back

@@ -1,0 +1,15 @@
+HTTP/1.1 200 OK
+Vary: Authorization
+Server: Apache
+Date: Sun, 28 Oct 2018 07:32:56 GMT
+paypal-debug-id: a411ee32e2933
+paypal-debug-id: a411ee32e2933
+HTTP_X_PP_AZ_LOCATOR: sandbox.slc
+Connection: close
+Content-Type: application/json
+Set-Cookie: X-PP-SILOVER=name%3DSANDBOX3.API.1%26silo_version%3D1880%26app%3Dapiplatformproxyserv%26TIME%3D677827931%26HTTP_X_PP_AZ_LOCATOR%3Dsandbox.slc; Expires=Sun, 28 Oct 2018 08:02:56 GMT; domain=.paypal.com; path=/; Secure; HttpOnly
+Set-Cookie: X-PP-SILOVER=; Expires=Thu, 01 Jan 1970 00:00:01 GMT
+Content-Language: *
+Content-Length: 1011
+
+{"id":"PAYID-LPKWMJY3B308698GX238064W","intent":"sale","state":"created","cart":"3P1934073V3891042","transactions":[{"amount":{"total":"42.00","currency":"NOK"},"payee":{"merchant_id":"0","email":"jhthorsen@cpan.org"},"description":"created by mojo-payment","custom":"created by mojo-payment","related_resources":[]}],"note_to_payer":"created by mojo-payment","redirect_urls":{"return_url":"https://example.com/checkout?success=1&paymentId=PAYID-LPKWMJY3B308698GX238064W","cancel_url":"https://example.com/checkout?cancel=1"},"create_time":"2018-10-28T07:32:55Z","update_time":"2018-10-28T07:32:56Z","links":[{"href":"https://api.sandbox.paypal.com/v1/payments/payment/PAYID-LPKWMJY3B308698GX238064W","rel":"self","method":"GET"},{"href":"https://api.sandbox.paypal.com/v1/payments/payment/PAYID-LPKWMJY3B308698GX238064W/execute","rel":"execute","method":"POST"},{"href":"https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token=EC-3P1934073V3891042","rel":"approval_url","method":"REDIRECT"}]}
