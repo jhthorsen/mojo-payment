@@ -1,0 +1,50 @@
+HTTP/1.1 200 OK
+Access-Control-Max-Age: 300
+Stripe-Version: 2018-09-24
+Server: nginx
+Strict-Transport-Security: max-age=31556926; includeSubDomains; preload
+Content-Length: 786
+Access-Control-Allow-Credentials: true
+Access-Control-Allow-Origin: *
+Access-Control-Expose-Headers: Request-Id, Stripe-Manage-Version, X-Stripe-External-Auth-Required, X-Stripe-Privileged-Session-Required
+Request-Id: req_J33JdqWJyKEMLV
+Connection: keep-alive
+Date: Sun, 28 Oct 2018 04:07:54 GMT
+Content-Type: application/json
+Cache-Control: no-cache, no-store
+Access-Control-Allow-Methods: GET, POST, HEAD, OPTIONS, DELETE
+
+{
+  "id": "tok_1DQ5Z82eZvKYlo2C6wXSP3yk",
+  "object": "token",
+  "card": {
+    "id": "card_1DQ5Z82eZvKYlo2CwFcDVyU5",
+    "object": "card",
+    "address_city": null,
+    "address_country": null,
+    "address_line1": null,
+    "address_line1_check": null,
+    "address_line2": null,
+    "address_state": null,
+    "address_zip": null,
+    "address_zip_check": null,
+    "brand": "Visa",
+    "country": "US",
+    "cvc_check": "unchecked",
+    "dynamic_last4": null,
+    "exp_month": 12,
+    "exp_year": 2019,
+    "fingerprint": "Xt5EWLLDS7FJjR1c",
+    "funding": "credit",
+    "last4": "4242",
+    "metadata": {
+    },
+    "name": null,
+    "tokenization_method": null
+  },
+  "client_ip": "27.141.156.40",
+  "created": 1540699674,
+  "livemode": false,
+  "type": "card",
+  "used": false
+}
