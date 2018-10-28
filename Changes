@@ -1,4 +1,6 @@
-Revision history for perl distribution Mojolicious-Plugin-Payment
+Revision history for perl distribution Mojo-Payment
 
 0.01 Not Released
- - Started project
+ - Add Mojo::Payment::Paypal
+ - Add Mojo::Payment::Stripe
+ - Add Mojolicious::Plugin::Payment

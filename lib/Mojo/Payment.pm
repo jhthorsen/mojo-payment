@@ -5,6 +5,8 @@ use Mojo::Payment::Error;
 use Mojo::Promise;
 use Mojo::UserAgent;
 
+our $VERSION = '0.01';
+
 has default_currency => '';
 has ua               => sub {
   my $ua
